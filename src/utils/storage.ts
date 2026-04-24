@@ -119,28 +119,21 @@ export function removeFromSyncQueue(packId: string): void {
   localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q))
 }
 
-// Returns null if not yet initialized (first launch)
-export function getMyPackIds(): Set<string> | null {
-  const raw = localStorage.getItem(MY_PACKS_KEY)
-  if (raw === null) return null
-  try { return new Set(JSON.parse(raw) as string[]) } catch { return new Set() }
+export function getMyPackIds(username: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(`${MY_PACKS_KEY}_${username}`)
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
+  } catch { return new Set() }
 }
 
-// Call once on first launch to seed with all existing local packs
-export function initMyPackIds(existingIds: string[]): void {
-  if (localStorage.getItem(MY_PACKS_KEY) !== null) return
-  localStorage.setItem(MY_PACKS_KEY, JSON.stringify(existingIds))
-}
-
-export function addToMyPackIds(id: string): void {
-  const ids = getMyPackIds() ?? new Set<string>()
+export function addToMyPackIds(username: string, id: string): void {
+  const ids = getMyPackIds(username)
   ids.add(id)
-  localStorage.setItem(MY_PACKS_KEY, JSON.stringify([...ids]))
+  localStorage.setItem(`${MY_PACKS_KEY}_${username}`, JSON.stringify([...ids]))
 }
 
-export function removeFromMyPackIds(id: string): void {
-  const ids = getMyPackIds()
-  if (!ids) return
+export function removeFromMyPackIds(username: string, id: string): void {
+  const ids = getMyPackIds(username)
   ids.delete(id)
-  localStorage.setItem(MY_PACKS_KEY, JSON.stringify([...ids]))
+  localStorage.setItem(`${MY_PACKS_KEY}_${username}`, JSON.stringify([...ids]))
 }

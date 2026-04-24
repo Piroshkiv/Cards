@@ -113,14 +113,18 @@ export async function subscribeToPack(packId: string, username: string): Promise
   return merged
 }
 
-export async function unsubscribeFromPack(packId: string, username: string): Promise<void> {
-  deletePack(packId)
-  removeFromMyPackIds(packId)
+export async function removeOwnerFromServer(packId: string, username: string): Promise<void> {
   await fetch(`${WORKER_URL}/api/packs/${packId}/unsubscribe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username }),
-  })
+  }).catch(() => {})
+}
+
+export async function unsubscribeFromPack(packId: string, username: string): Promise<void> {
+  deletePack(packId)
+  removeFromMyPackIds(username, packId)
+  await removeOwnerFromServer(packId, username)
 }
 
 export async function syncAll(username: string): Promise<void> {

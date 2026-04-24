@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Plus, Upload, Users, User, RefreshCw } from 'lucide-react'
-import { getPacks, savePacks, savePack, deletePack, getUsername, saveUsername, getSyncQueue, getMyPackIds, initMyPackIds, addToMyPackIds } from '../utils/storage'
+import { getPacks, savePacks, savePack, deletePack, getUsername, saveUsername, getSyncQueue, getMyPackIds, addToMyPackIds, removeFromMyPackIds } from '../utils/storage'
 import { parseCSV } from '../utils/csv'
-import { syncAll, fetchAllPacks, subscribeToPack, unsubscribeFromPack } from '../utils/sync'
+import { syncAll, fetchAllPacks, subscribeToPack, unsubscribeFromPack, removeOwnerFromServer } from '../utils/sync'
 import { PackCard } from '../components/PackCard'
 import { Modal } from '../components/Modal'
 import { Button } from '../components/Button'
@@ -22,9 +22,8 @@ interface RemotePackSummary {
 export function Home() {
   const [packs, setPacks] = useState<Pack[]>(() => getPacks())
   const [myPackIds, setMyPackIds] = useState<Set<string>>(() => {
-    const existing = getPacks().map(p => p.id)
-    initMyPackIds(existing)
-    return getMyPackIds() ?? new Set(existing)
+    const name = getUsername()
+    return name ? getMyPackIds(name) : new Set()
   })
   const [username, setUsername] = useState<string | null>(() => getUsername())
   const [showUsernameModal, setShowUsernameModal] = useState(() => !getUsername())
@@ -61,10 +60,17 @@ export function Home() {
   function handleSaveUsername() {
     const name = usernameInput.trim()
     if (!name) return
+    const oldName = username
     saveUsername(name)
     setUsername(name)
     setUsernameInput('')
     setShowUsernameModal(false)
+    if (name !== oldName) {
+      // Смена профиля — чистим локальные паки и грузим паки нового пользователя
+      savePacks([])
+      setPacks([])
+      setMyPackIds(getMyPackIds(name))
+    }
     runSync(name)
   }
 
@@ -86,7 +92,7 @@ export function Home() {
       version: 1,
     }
     savePack(pack)
-    addToMyPackIds(pack.id)
+    if (username) addToMyPackIds(username, pack.id)
     setMyPackIds(prev => new Set([...prev, pack.id]))
     setPacks(getPacks())
     setNewPackName('')
@@ -97,7 +103,10 @@ export function Home() {
   function handleDeletePack(id: string) {
     if (!confirm('Удалить пак и все его карточки?')) return
     deletePack(id)
+    if (username) removeFromMyPackIds(username, id)
+    setMyPackIds(prev => { const n = new Set(prev); n.delete(id); return n })
     setPacks(getPacks())
+    if (username) removeOwnerFromServer(id, username)
   }
 
   async function handleUnsubscribe(id: string) {
@@ -119,7 +128,7 @@ export function Home() {
       const { packs: newPacks, result } = parseCSV(text, getPacks())
       savePacks(newPacks)
       const newIds = newPacks.filter(p => !before.has(p.id)).map(p => p.id)
-      newIds.forEach(addToMyPackIds)
+      if (username) newIds.forEach(id => addToMyPackIds(username, id))
       if (newIds.length) setMyPackIds(prev => new Set([...prev, ...newIds]))
       setPacks(getPacks())
 
