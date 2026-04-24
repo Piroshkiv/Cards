@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS packs (
   name TEXT NOT NULL,
   cards TEXT NOT NULL DEFAULT '[]',
   version INTEGER NOT NULL DEFAULT 1,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  created_by TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS pack_owners (
