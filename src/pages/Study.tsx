@@ -44,6 +44,18 @@ export function Study() {
   const [nextDue, setNextDue]       = useState<Date | null>(null)
   const [countdown, setCountdown]   = useState('')
 
+  // Батч-направление для quiz: 5–10 карточек в одну сторону, потом переключение
+  const [batchDir, setBatchDir]     = useState<Direction>('de_ru')
+  const [batchCount, setBatchCount] = useState(0)
+  const [batchSize, setBatchSize]   = useState(5)
+
+  // Эффективные направления: в quiz с обеими включёнными — только текущий батч
+  const activeDirs = useMemo((): Record<Direction, boolean> => {
+    if (settings.mode !== 'quiz' || !settings.directions.de_ru || !settings.directions.ru_de)
+      return settings.directions
+    return { de_ru: batchDir === 'de_ru', ru_de: batchDir === 'ru_de' }
+  }, [settings.mode, settings.directions, batchDir])
+
   const pack = getPack(id!)
 
   // Когда ждём — тикаем и автопроверяем появление due карточек
@@ -52,13 +64,13 @@ export function Study() {
     const tick = () => {
       const fresh = getPack(id!)
       if (!fresh) return
-      const q = refreshQueueState(fresh, settings.mode, settings.directions, [])
+      const q = refreshQueueState(fresh, settings.mode, activeDirs, [])
       if (q.length > 0) {
         setWaiting(false)
         setQueue(q)
         return
       }
-      const nd = getNextDueTime(fresh, settings.mode, settings.directions)
+      const nd = getNextDueTime(fresh, settings.mode, activeDirs)
       setNextDue(nd)
       if (nd) {
         const diff = nd.getTime() - Date.now()
@@ -108,7 +120,7 @@ export function Study() {
     if (grade === 0) {
       // Again: не сохраняем в storage, двигаем карточку в конец очереди
       setAnswered(n => n + 1)
-      const newQ = refreshQueueState(fresh, settings.mode, settings.directions, remaining, current)
+      const newQ = refreshQueueState(fresh, settings.mode, activeDirs, remaining, current)
       setQueue(newQ)
       return
     }
@@ -135,7 +147,7 @@ export function Study() {
 
     setAnswered(n => n + 1)
 
-    const newQ = refreshQueueState(fresh, settings.mode, settings.directions, remaining)
+    const newQ = refreshQueueState(fresh, settings.mode, activeDirs, remaining)
     if (newQ.length === 0) {
       setWaiting(true)
     } else {
@@ -149,6 +161,7 @@ export function Study() {
     const fresh = getPack(id!)!
     const card  = fresh.cards.find(c => c.id === current.card.id)!
     const remaining = queue.slice(1)
+
     const prog = current.direction === 'de_ru' ? card.quiz.de_ru : card.quiz.ru_de
     const levelBefore = prog.level
     const updated = applyQuizResult(prog, correct)
@@ -158,12 +171,30 @@ export function Study() {
     savePack(fresh)
     setAnswered(n => n + 1)
 
+    // Батч: считаем показанные карточки и при необходимости переключаем направление
+    const bothDirs = settings.directions.de_ru && settings.directions.ru_de
+    let nextDirs = activeDirs
+    let dirSwitched = false
+    if (bothDirs) {
+      const newCount = batchCount + 1
+      if (newCount >= batchSize) {
+        const newDir: Direction = batchDir === 'de_ru' ? 'ru_de' : 'de_ru'
+        nextDirs = { de_ru: newDir === 'de_ru', ru_de: newDir === 'ru_de' }
+        dirSwitched = true
+        setBatchDir(newDir)
+        setBatchCount(0)
+        setBatchSize(5 + Math.floor(Math.random() * 6))
+      } else {
+        setBatchCount(newCount)
+      }
+    }
+
     if (!correct) {
-      // Неправильно в квизе = Again (двигаем в конец, уровень уже обновлён в storage)
-      const newQ = refreshQueueState(fresh, settings.mode, settings.directions, remaining, current)
+      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, remaining, current)
       setQueue(newQ)
     } else {
-      const newQ = refreshQueueState(fresh, settings.mode, settings.directions, remaining)
+      // При смене направления сбрасываем очередь чтобы не показывать карточки старого батча
+      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, dirSwitched ? [] : remaining)
       if (newQ.length === 0) setWaiting(true)
       else setQueue(newQ)
     }
@@ -178,11 +209,22 @@ export function Study() {
     setWaiting(false)
     setPhase('session')
 
+    const startDir: Direction = Math.random() < 0.5 ? 'de_ru' : 'ru_de'
+    const startSize = 5 + Math.floor(Math.random() * 6)
+    setBatchDir(startDir)
+    setBatchCount(0)
+    setBatchSize(startSize)
+
+    const startDirs: Record<Direction, boolean> =
+      (settings.mode === 'quiz' && settings.directions.de_ru && settings.directions.ru_de)
+        ? { de_ru: startDir === 'de_ru', ru_de: startDir === 'ru_de' }
+        : settings.directions
+
     const fresh = getPack(id!)!
-    const q = refreshQueueState(fresh, settings.mode, settings.directions, [])
+    const q = refreshQueueState(fresh, settings.mode, startDirs, [])
     if (q.length === 0) {
       setWaiting(true)
-      setNextDue(getNextDueTime(fresh, settings.mode, settings.directions))
+      setNextDue(getNextDueTime(fresh, settings.mode, startDirs))
     } else {
       setQueue(q)
     }
