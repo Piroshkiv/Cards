@@ -153,5 +153,10 @@ async function handleUnsubscribe(env: Env, id: string, body: SubscribeBody): Pro
   const { username } = body
   await env.DB.prepare('DELETE FROM pack_owners WHERE pack_id = ? AND username = ?')
     .bind(id, username).run()
+  const remaining = await env.DB.prepare('SELECT COUNT(*) as cnt FROM pack_owners WHERE pack_id = ?')
+    .bind(id).first<{ cnt: number }>()
+  if ((remaining?.cnt ?? 0) === 0) {
+    await env.DB.prepare('DELETE FROM packs WHERE id = ?').bind(id).run()
+  }
   return json({ ok: true })
 }
