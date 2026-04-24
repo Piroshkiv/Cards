@@ -1,7 +1,7 @@
 import type { Pack, Card } from '../types'
 import {
   getPacks, savePacks, getPack, deletePack,
-  getSyncQueue, addToSyncQueue, removeFromSyncQueue, removeFromMyPackIds,
+  getSyncQueue, addToSyncQueue, removeFromSyncQueue,
 } from './storage'
 import { defaultProgress } from './progress'
 
@@ -12,6 +12,7 @@ interface RemotePackSummary {
   name: string
   version: number
   updated_at: string
+  created_by: string
   owners: string[]
   card_count: number
 }
@@ -27,6 +28,7 @@ interface RemoteFullPack {
   name: string
   version: number
   updated_at: string
+  created_by: string
   cards: RemoteCard[]
   owners: string[]
 }
@@ -71,6 +73,7 @@ export async function pushPack(pack: Pack, username: string): Promise<void> {
       cards: stripProgress(pack),
       version: pack.version,
       updated_at: pack.updatedAt,
+      created_by: pack.createdBy || username,
       username,
     }),
   })
@@ -95,6 +98,7 @@ export async function subscribeToPack(packId: string, username: string): Promise
     version: remote.version,
     updatedAt: remote.updated_at,
     createdAt: localPack?.createdAt ?? remote.updated_at,
+    createdBy: remote.created_by,
     cards: mergeCards(localPack, remote.cards),
   }
 
@@ -123,14 +127,12 @@ export async function removeOwnerFromServer(packId: string, username: string): P
 
 export async function unsubscribeFromPack(packId: string, username: string): Promise<void> {
   deletePack(packId)
-  removeFromMyPackIds(username, packId)
   await removeOwnerFromServer(packId, username)
 }
 
 export async function syncAll(username: string): Promise<void> {
   if (!WORKER_URL) return
 
-  // Flush offline queue
   for (const packId of getSyncQueue()) {
     const pack = getPack(packId)
     if (!pack) { removeFromSyncQueue(packId); continue }
@@ -151,7 +153,6 @@ export async function syncAll(username: string): Promise<void> {
   const localPacks = getPacks()
   const updatedPacks = [...localPacks]
 
-  // Push local packs that are newer or not on server
   for (const local of localPacks) {
     const remote = remoteById.get(local.id)
     if (!remote || localIsNewer(local, remote)) {
@@ -160,7 +161,6 @@ export async function syncAll(username: string): Promise<void> {
     }
   }
 
-  // Pull remote packs where user is owner and remote is newer
   const localById = new Map(localPacks.map(p => [p.id, p]))
   for (const remote of remoteList) {
     if (!remote.owners.includes(username)) continue
@@ -178,6 +178,7 @@ export async function syncAll(username: string): Promise<void> {
         version: full.version,
         updatedAt: full.updated_at,
         createdAt: local?.createdAt ?? full.updated_at,
+        createdBy: full.created_by,
         cards: mergeCards(local, full.cards),
       }
 

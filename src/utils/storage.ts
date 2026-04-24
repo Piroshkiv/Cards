@@ -4,27 +4,24 @@ const PACKS_KEY = 'cards_packs'
 const SETTINGS_KEY = 'cards_study_settings'
 const USERNAME_KEY = 'cards_username'
 const SYNC_QUEUE_KEY = 'cards_sync_queue'
-const MY_PACKS_KEY = 'cards_my_pack_ids'
 
 const EMPTY_PROGRESS: CardProgress = { level: 0, dueDate: null }
 
-// Миграция: старый формат quiz был плоским CardProgress, новый — { de_ru, ru_de }
 function migratePack(raw: unknown): Pack {
   const pack = raw as Pack
   const migrated: Pack = {
     ...pack,
     version: pack.version ?? 1,
     updatedAt: pack.updatedAt ?? pack.createdAt,
+    createdBy: pack.createdBy ?? '',
     cards: pack.cards.map(card => {
       const quiz = card.quiz as unknown as Record<string, unknown>
-      // Если quiz это плоский прогресс (старый формат) — конвертируем
       if (quiz && 'level' in quiz && !('de_ru' in quiz)) {
         return {
           ...card,
           quiz: { de_ru: EMPTY_PROGRESS, ru_de: EMPTY_PROGRESS },
         }
       }
-      // Если quiz.de_ru или quiz.ru_de отсутствует — подставляем дефолт
       return {
         ...card,
         quiz: {
@@ -117,23 +114,4 @@ export function addToSyncQueue(packId: string): void {
 export function removeFromSyncQueue(packId: string): void {
   const q = getSyncQueue().filter(id => id !== packId)
   localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q))
-}
-
-export function getMyPackIds(username: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(`${MY_PACKS_KEY}_${username}`)
-    return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
-  } catch { return new Set() }
-}
-
-export function addToMyPackIds(username: string, id: string): void {
-  const ids = getMyPackIds(username)
-  ids.add(id)
-  localStorage.setItem(`${MY_PACKS_KEY}_${username}`, JSON.stringify([...ids]))
-}
-
-export function removeFromMyPackIds(username: string, id: string): void {
-  const ids = getMyPackIds(username)
-  ids.delete(id)
-  localStorage.setItem(`${MY_PACKS_KEY}_${username}`, JSON.stringify([...ids]))
 }

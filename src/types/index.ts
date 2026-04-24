@@ -28,6 +28,7 @@ export interface Pack {
   createdAt: string
   updatedAt: string
   version: number
+  createdBy: string
 }
 
 export type StudyMode = 'flashcard' | 'quiz' | 'writing'

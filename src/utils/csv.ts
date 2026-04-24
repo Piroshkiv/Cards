@@ -48,7 +48,7 @@ export function parseCSV(
     let pack = packs.find(p => p.name.toLowerCase() === packName.toLowerCase())
     if (!pack) {
       const now = new Date().toISOString()
-      pack = { id: crypto.randomUUID(), name: packName, cards: [], createdAt: now, updatedAt: now, version: 1 }
+      pack = { id: crypto.randomUUID(), name: packName, cards: [], createdAt: now, updatedAt: now, version: 1, createdBy: '' }
       packs.push(pack)
       result.created.push(packName)
     }

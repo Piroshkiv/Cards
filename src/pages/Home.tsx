@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Plus, Upload, Users, User, RefreshCw } from 'lucide-react'
-import { getPacks, savePacks, savePack, deletePack, getUsername, saveUsername, getSyncQueue, getMyPackIds, addToMyPackIds, removeFromMyPackIds } from '../utils/storage'
+import { getPacks, savePacks, savePack, deletePack, getUsername, saveUsername, getSyncQueue } from '../utils/storage'
 import { parseCSV } from '../utils/csv'
 import { syncAll, fetchAllPacks, subscribeToPack, unsubscribeFromPack, removeOwnerFromServer } from '../utils/sync'
 import { PackCard } from '../components/PackCard'
@@ -21,10 +21,6 @@ interface RemotePackSummary {
 
 export function Home() {
   const [packs, setPacks] = useState<Pack[]>(() => getPacks())
-  const [myPackIds, setMyPackIds] = useState<Set<string>>(() => {
-    const name = getUsername()
-    return name ? getMyPackIds(name) : new Set()
-  })
   const [username, setUsername] = useState<string | null>(() => getUsername())
   const [showUsernameModal, setShowUsernameModal] = useState(() => !getUsername())
   const [usernameInput, setUsernameInput] = useState('')
@@ -51,7 +47,6 @@ export function Home() {
     }
   }, [])
 
-  // Auto-sync on mount
   useEffect(() => {
     const name = getUsername()
     if (name) runSync(name)
@@ -66,10 +61,8 @@ export function Home() {
     setUsernameInput('')
     setShowUsernameModal(false)
     if (name !== oldName) {
-      // Смена профиля — чистим локальные паки и грузим паки нового пользователя
       savePacks([])
       setPacks([])
-      setMyPackIds(getMyPackIds(name))
     }
     runSync(name)
   }
@@ -90,10 +83,9 @@ export function Home() {
       createdAt: now,
       updatedAt: now,
       version: 1,
+      createdBy: username ?? '',
     }
     savePack(pack)
-    if (username) addToMyPackIds(username, pack.id)
-    setMyPackIds(prev => new Set([...prev, pack.id]))
     setPacks(getPacks())
     setNewPackName('')
     setShowAddModal(false)
@@ -103,8 +95,6 @@ export function Home() {
   function handleDeletePack(id: string) {
     if (!confirm('Удалить пак и все его карточки?')) return
     deletePack(id)
-    if (username) removeFromMyPackIds(username, id)
-    setMyPackIds(prev => { const n = new Set(prev); n.delete(id); return n })
     setPacks(getPacks())
     if (username) removeOwnerFromServer(id, username)
   }
@@ -126,10 +116,11 @@ export function Home() {
       const text = ev.target?.result as string
       const before = new Set(getPacks().map(p => p.id))
       const { packs: newPacks, result } = parseCSV(text, getPacks())
-      savePacks(newPacks)
-      const newIds = newPacks.filter(p => !before.has(p.id)).map(p => p.id)
-      if (username) newIds.forEach(id => addToMyPackIds(username, id))
-      if (newIds.length) setMyPackIds(prev => new Set([...prev, ...newIds]))
+      // Новым пакам из CSV ставим автора
+      const tagged = newPacks.map(p =>
+        !before.has(p.id) ? { ...p, createdBy: username ?? '' } : p
+      )
+      savePacks(tagged)
       setPacks(getPacks())
 
       if (result.errors.length > 0) {
@@ -167,7 +158,6 @@ export function Home() {
     try {
       await subscribeToPack(packId, username)
       setPacks(getPacks())
-      // Refresh owners in browse list
       setRemotePacks(prev => prev.map(p =>
         p.id === packId ? { ...p, owners: [...p.owners, username] } : p
       ))
@@ -213,13 +203,7 @@ export function Home() {
           <User size={15} />
           {username ?? 'Войти'}
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          style={{ display: 'none' }}
-          onChange={handleCSV}
-        />
+        <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={handleCSV} />
       </div>
 
       {totalWords > 0 && (
@@ -249,7 +233,7 @@ export function Home() {
             <PackCard
               key={pack.id}
               pack={pack}
-              isOwner={myPackIds.has(pack.id)}
+              isOwner={!pack.createdBy || pack.createdBy === username}
               onDelete={handleDeletePack}
               onUnsubscribe={handleUnsubscribe}
             />
@@ -257,7 +241,6 @@ export function Home() {
         )}
       </div>
 
-      {/* Username modal */}
       {showUsernameModal && (
         <Modal
           title={username ? 'Изменить имя' : 'Привет! Введите имя'}
@@ -274,18 +257,13 @@ export function Home() {
               autoFocus
             />
             <div className="modal-form__actions">
-              <Button variant="secondary" onClick={() => setShowUsernameModal(false)}>
-                Отмена
-              </Button>
-              <Button onClick={handleSaveUsername} disabled={!usernameInput.trim()}>
-                Сохранить
-              </Button>
+              <Button variant="secondary" onClick={() => setShowUsernameModal(false)}>Отмена</Button>
+              <Button onClick={handleSaveUsername} disabled={!usernameInput.trim()}>Сохранить</Button>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* New pack modal */}
       {showAddModal && (
         <Modal title="Новый пак" onClose={() => setShowAddModal(false)}>
           <div className="modal-form">
@@ -299,18 +277,13 @@ export function Home() {
               autoFocus
             />
             <div className="modal-form__actions">
-              <Button variant="secondary" onClick={() => setShowAddModal(false)}>
-                Отмена
-              </Button>
-              <Button onClick={handleAddPack} disabled={!newPackName.trim()}>
-                Создать
-              </Button>
+              <Button variant="secondary" onClick={() => setShowAddModal(false)}>Отмена</Button>
+              <Button onClick={handleAddPack} disabled={!newPackName.trim()}>Создать</Button>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* Browse packs modal */}
       {showBrowseModal && (
         <Modal title="Все паки" onClose={() => setShowBrowseModal(false)}>
           <div className="browse-packs">
@@ -325,9 +298,7 @@ export function Home() {
                 <div key={rp.id} className="browse-pack-row">
                   <div className="browse-pack-row__info">
                     <span className="browse-pack-row__name">{rp.name}</span>
-                    <span className="browse-pack-row__meta">
-                      {rp.card_count} слов · {rp.owners.join(', ')}
-                    </span>
+                    <span className="browse-pack-row__meta">{rp.card_count} слов · {rp.owners.join(', ')}</span>
                   </div>
                   <Button
                     size="sm"
