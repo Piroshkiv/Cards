@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Read(//c/Users/Iho/source/repos/**)",
+      "Bash(npx --yes create-vite@latest Cards-tmp --template react-ts)",
+      "Bash(cp -r C:/Users/Iho/source/repos/Cards-tmp/. C:/Users/Iho/source/repos/Cards/)",
+      "Bash(rm -rf C:/Users/Iho/source/repos/Cards-tmp)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:5173)"
+    ]
+  }
+}
