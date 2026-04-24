@@ -5,7 +5,7 @@ import {
 } from './storage'
 import { defaultProgress } from './progress'
 
-const WORKER_URL = (import.meta.env.VITE_WORKER_URL as string | undefined) ?? ''
+const WORKER_URL = (import.meta.env.VITE_WORKER_URL as string | undefined) ?? 'https://cards-sync.laim0999716349.workers.dev'
 
 interface RemotePackSummary {
   id: string
