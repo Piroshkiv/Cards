@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "worker:db:init": "wrangler d1 execute cards-sync --file=worker/schema.sql",
+    "worker:db:init:remote": "wrangler d1 execute cards-sync --remote --file=worker/schema.sql"
   },
   "dependencies": {
     "lucide-react": "^1.9.0",
@@ -17,6 +21,7 @@
     "react-router-dom": "^7.14.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250409.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.2",
     "@types/papaparse": "^5.5.2",
@@ -29,6 +34,7 @@
     "globals": "^17.5.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "wrangler": "^4.85.0"
   }
 }

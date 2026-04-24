@@ -1,0 +1,8 @@
+name = "cards-sync"
+main = "worker/index.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cards-sync"
+database_id = "bb74d2c2-fd3a-4ede-b753-d7ce9a745870"

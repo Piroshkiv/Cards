@@ -2,13 +2,18 @@ import type { Pack, StudySettings, CardProgress } from '../types'
 
 const PACKS_KEY = 'cards_packs'
 const SETTINGS_KEY = 'cards_study_settings'
+const USERNAME_KEY = 'cards_username'
+const SYNC_QUEUE_KEY = 'cards_sync_queue'
 
 const EMPTY_PROGRESS: CardProgress = { level: 0, dueDate: null }
 
 // Миграция: старый формат quiz был плоским CardProgress, новый — { de_ru, ru_de }
-function migratePack(pack: Pack): Pack {
-  return {
+function migratePack(raw: unknown): Pack {
+  const pack = raw as Pack
+  const migrated: Pack = {
     ...pack,
+    version: pack.version ?? 1,
+    updatedAt: pack.updatedAt ?? pack.createdAt,
     cards: pack.cards.map(card => {
       const quiz = card.quiz as unknown as Record<string, unknown>
       // Если quiz это плоский прогресс (старый формат) — конвертируем
@@ -28,6 +33,7 @@ function migratePack(pack: Pack): Pack {
       }
     }),
   }
+  return migrated
 }
 
 export function getPacks(): Pack[] {
@@ -49,9 +55,14 @@ export function getPack(id: string): Pack | undefined {
 export function savePack(pack: Pack): void {
   const packs = getPacks()
   const idx = packs.findIndex(p => p.id === pack.id)
-  if (idx >= 0) packs[idx] = pack
-  else packs.push(pack)
+  const now = new Date().toISOString()
+  if (idx >= 0) {
+    packs[idx] = { ...pack, version: (pack.version ?? 1) + 1, updatedAt: now }
+  } else {
+    packs.push({ ...pack, version: pack.version ?? 1, updatedAt: pack.updatedAt ?? now })
+  }
   savePacks(packs)
+  addToSyncQueue(pack.id)
 }
 
 export function deletePack(id: string): void {
@@ -77,4 +88,32 @@ export function saveStudySettings(packId: string, settings: StudySettings): void
 
 function defaultStudySettings(): StudySettings {
   return { mode: 'flashcard', directions: { de_ru: true, ru_de: true } }
+}
+
+export function getUsername(): string | null {
+  return localStorage.getItem(USERNAME_KEY)
+}
+
+export function saveUsername(name: string): void {
+  localStorage.setItem(USERNAME_KEY, name.trim())
+}
+
+export function getSyncQueue(): string[] {
+  try {
+    const raw = localStorage.getItem(SYNC_QUEUE_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+export function addToSyncQueue(packId: string): void {
+  const q = getSyncQueue()
+  if (!q.includes(packId)) {
+    q.push(packId)
+    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q))
+  }
+}
+
+export function removeFromSyncQueue(packId: string): void {
+  const q = getSyncQueue().filter(id => id !== packId)
+  localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q))
 }
