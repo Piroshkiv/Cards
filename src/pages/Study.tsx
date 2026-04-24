@@ -48,6 +48,8 @@ export function Study() {
   const [batchDir, setBatchDir]     = useState<Direction>('de_ru')
   const [batchCount, setBatchCount] = useState(0)
   const [batchSize, setBatchSize]   = useState(5)
+  // Запаркованная очередь противоположного направления — не удаляется при переключении
+  const [parkedQueue, setParkedQueue] = useState<QueueItem[]>([])
 
   // Эффективные направления: в quiz с обеими включёнными — только текущий батч
   const activeDirs = useMemo((): Record<Direction, boolean> => {
@@ -171,7 +173,14 @@ export function Study() {
     savePack(fresh)
     setAnswered(n => n + 1)
 
-    // Батч: считаем показанные карточки и при необходимости переключаем направление
+    if (!correct) {
+      // Неправильно: карточка в конец, батч не считаем
+      const newQ = refreshQueueState(fresh, settings.mode, activeDirs, remaining, current)
+      setQueue(newQ)
+      return
+    }
+
+    // Батч: считаем только правильные ответы
     const bothDirs = settings.directions.de_ru && settings.directions.ru_de
     let nextDirs = activeDirs
     let dirSwitched = false
@@ -189,12 +198,14 @@ export function Study() {
       }
     }
 
-    if (!correct) {
-      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, remaining, current)
-      setQueue(newQ)
+    if (dirSwitched) {
+      // Паркуем текущий остаток, достаём запаркованный остаток другого направления
+      setParkedQueue(remaining)
+      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, parkedQueue)
+      if (newQ.length === 0) setWaiting(true)
+      else setQueue(newQ)
     } else {
-      // При смене направления сбрасываем очередь чтобы не показывать карточки старого батча
-      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, dirSwitched ? [] : remaining)
+      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, remaining)
       if (newQ.length === 0) setWaiting(true)
       else setQueue(newQ)
     }
@@ -214,6 +225,7 @@ export function Study() {
     setBatchDir(startDir)
     setBatchCount(0)
     setBatchSize(startSize)
+    setParkedQueue([])
 
     const startDirs: Record<Direction, boolean> =
       (settings.mode === 'quiz' && settings.directions.de_ru && settings.directions.ru_de)
