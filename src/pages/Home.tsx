@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Plus, Upload, Users, User, RefreshCw } from 'lucide-react'
-import { getPacks, savePacks, savePack, deletePack, getUsername, saveUsername, getSyncQueue } from '../utils/storage'
+import { getPacks, savePacks, savePack, deletePack, getUsername, saveUsername, getSyncQueue, getMyPackIds, initMyPackIds, addToMyPackIds } from '../utils/storage'
 import { parseCSV } from '../utils/csv'
-import { syncAll, fetchAllPacks, subscribeToPack } from '../utils/sync'
+import { syncAll, fetchAllPacks, subscribeToPack, unsubscribeFromPack } from '../utils/sync'
 import { PackCard } from '../components/PackCard'
 import { Modal } from '../components/Modal'
 import { Button } from '../components/Button'
@@ -21,6 +21,11 @@ interface RemotePackSummary {
 
 export function Home() {
   const [packs, setPacks] = useState<Pack[]>(() => getPacks())
+  const [myPackIds, setMyPackIds] = useState<Set<string>>(() => {
+    const existing = getPacks().map(p => p.id)
+    initMyPackIds(existing)
+    return getMyPackIds() ?? new Set(existing)
+  })
   const [username, setUsername] = useState<string | null>(() => getUsername())
   const [showUsernameModal, setShowUsernameModal] = useState(() => !getUsername())
   const [usernameInput, setUsernameInput] = useState('')
@@ -81,6 +86,8 @@ export function Home() {
       version: 1,
     }
     savePack(pack)
+    addToMyPackIds(pack.id)
+    setMyPackIds(prev => new Set([...prev, pack.id]))
     setPacks(getPacks())
     setNewPackName('')
     setShowAddModal(false)
@@ -93,6 +100,12 @@ export function Home() {
     setPacks(getPacks())
   }
 
+  async function handleUnsubscribe(id: string) {
+    if (!confirm('Отписаться от пака?')) return
+    await unsubscribeFromPack(id, username ?? '')
+    setPacks(getPacks())
+  }
+
   function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -102,8 +115,12 @@ export function Home() {
     const reader = new FileReader()
     reader.onload = ev => {
       const text = ev.target?.result as string
+      const before = new Set(getPacks().map(p => p.id))
       const { packs: newPacks, result } = parseCSV(text, getPacks())
       savePacks(newPacks)
+      const newIds = newPacks.filter(p => !before.has(p.id)).map(p => p.id)
+      newIds.forEach(addToMyPackIds)
+      if (newIds.length) setMyPackIds(prev => new Set([...prev, ...newIds]))
       setPacks(getPacks())
 
       if (result.errors.length > 0) {
@@ -220,7 +237,13 @@ export function Home() {
           </div>
         ) : (
           packs.map(pack => (
-            <PackCard key={pack.id} pack={pack} onDelete={handleDeletePack} />
+            <PackCard
+              key={pack.id}
+              pack={pack}
+              isOwner={myPackIds.has(pack.id)}
+              onDelete={handleDeletePack}
+              onUnsubscribe={handleUnsubscribe}
+            />
           ))
         )}
       </div>

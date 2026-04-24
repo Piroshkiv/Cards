@@ -1,7 +1,7 @@
 import type { Pack, Card } from '../types'
 import {
-  getPacks, savePacks, getPack,
-  getSyncQueue, addToSyncQueue, removeFromSyncQueue,
+  getPacks, savePacks, getPack, deletePack,
+  getSyncQueue, addToSyncQueue, removeFromSyncQueue, removeFromMyPackIds,
 } from './storage'
 import { defaultProgress } from './progress'
 
@@ -111,6 +111,16 @@ export async function subscribeToPack(packId: string, username: string): Promise
   })
 
   return merged
+}
+
+export async function unsubscribeFromPack(packId: string, username: string): Promise<void> {
+  deletePack(packId)
+  removeFromMyPackIds(packId)
+  await fetch(`${WORKER_URL}/api/packs/${packId}/unsubscribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  })
 }
 
 export async function syncAll(username: string): Promise<void> {

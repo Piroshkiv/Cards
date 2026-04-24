@@ -1,14 +1,16 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Trash2, Play } from 'lucide-react'
+import { BookOpen, Trash2, Play, LogOut } from 'lucide-react'
 import type { Pack } from '../types'
 import { countDueToday, avgMasteryPercent } from '../utils/deck'
 
 interface PackCardProps {
   pack: Pack
+  isOwner: boolean
   onDelete: (id: string) => void
+  onUnsubscribe: (id: string) => void
 }
 
-export function PackCard({ pack, onDelete }: PackCardProps) {
+export function PackCard({ pack, isOwner, onDelete, onUnsubscribe }: PackCardProps) {
   const due     = countDueToday(pack.cards)
   const mastery = avgMasteryPercent(pack.cards)
 
@@ -36,13 +38,23 @@ export function PackCard({ pack, onDelete }: PackCardProps) {
             Учить
           </button>
         </Link>
-        <button
-          className="btn-icon btn-icon--danger"
-          onClick={() => onDelete(pack.id)}
-          title="Удалить пак"
-        >
-          <Trash2 size={16} />
-        </button>
+        {isOwner ? (
+          <button
+            className="btn-icon btn-icon--danger"
+            onClick={() => onDelete(pack.id)}
+            title="Удалить пак"
+          >
+            <Trash2 size={16} />
+          </button>
+        ) : (
+          <button
+            className="btn-icon btn-icon--danger"
+            onClick={() => onUnsubscribe(pack.id)}
+            title="Отписаться"
+          >
+            <LogOut size={16} />
+          </button>
+        )}
       </div>
     </div>
   )

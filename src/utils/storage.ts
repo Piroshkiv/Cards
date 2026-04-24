@@ -4,6 +4,7 @@ const PACKS_KEY = 'cards_packs'
 const SETTINGS_KEY = 'cards_study_settings'
 const USERNAME_KEY = 'cards_username'
 const SYNC_QUEUE_KEY = 'cards_sync_queue'
+const MY_PACKS_KEY = 'cards_my_pack_ids'
 
 const EMPTY_PROGRESS: CardProgress = { level: 0, dueDate: null }
 
@@ -116,4 +117,30 @@ export function addToSyncQueue(packId: string): void {
 export function removeFromSyncQueue(packId: string): void {
   const q = getSyncQueue().filter(id => id !== packId)
   localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q))
+}
+
+// Returns null if not yet initialized (first launch)
+export function getMyPackIds(): Set<string> | null {
+  const raw = localStorage.getItem(MY_PACKS_KEY)
+  if (raw === null) return null
+  try { return new Set(JSON.parse(raw) as string[]) } catch { return new Set() }
+}
+
+// Call once on first launch to seed with all existing local packs
+export function initMyPackIds(existingIds: string[]): void {
+  if (localStorage.getItem(MY_PACKS_KEY) !== null) return
+  localStorage.setItem(MY_PACKS_KEY, JSON.stringify(existingIds))
+}
+
+export function addToMyPackIds(id: string): void {
+  const ids = getMyPackIds() ?? new Set<string>()
+  ids.add(id)
+  localStorage.setItem(MY_PACKS_KEY, JSON.stringify([...ids]))
+}
+
+export function removeFromMyPackIds(id: string): void {
+  const ids = getMyPackIds()
+  if (!ids) return
+  ids.delete(id)
+  localStorage.setItem(MY_PACKS_KEY, JSON.stringify([...ids]))
 }

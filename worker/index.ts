@@ -4,7 +4,7 @@ interface Env {
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
@@ -39,6 +39,11 @@ export default {
       if (request.method === 'POST' && parts.length === 4 && parts[1] === 'packs' && parts[3] === 'subscribe') {
         const body = await request.json() as SubscribeBody
         return handleSubscribe(env, parts[2], body)
+      }
+
+      if (request.method === 'POST' && parts.length === 4 && parts[1] === 'packs' && parts[3] === 'unsubscribe') {
+        const body = await request.json() as SubscribeBody
+        return handleUnsubscribe(env, parts[2], body)
       }
 
       return json({ error: 'Not found' }, 404)
@@ -145,5 +150,12 @@ async function handleSubscribe(env: Env, id: string, body: SubscribeBody): Promi
   await env.DB.prepare('INSERT OR IGNORE INTO pack_owners (pack_id, username) VALUES (?, ?)')
     .bind(id, username).run()
 
+  return json({ ok: true })
+}
+
+async function handleUnsubscribe(env: Env, id: string, body: SubscribeBody): Promise<Response> {
+  const { username } = body
+  await env.DB.prepare('DELETE FROM pack_owners WHERE pack_id = ? AND username = ?')
+    .bind(id, username).run()
   return json({ ok: true })
 }
