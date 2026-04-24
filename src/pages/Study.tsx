@@ -45,9 +45,9 @@ export function Study() {
   const [countdown, setCountdown]   = useState('')
 
   // Батч-направление для quiz: 5–10 карточек в одну сторону, потом переключение
+  const BATCH_SIZE = 10
   const [batchDir, setBatchDir]     = useState<Direction>('de_ru')
   const [batchCount, setBatchCount] = useState(0)
-  const [batchSize, setBatchSize]   = useState(5)
   // Запаркованная очередь противоположного направления — не удаляется при переключении
   const [parkedQueue, setParkedQueue] = useState<QueueItem[]>([])
 
@@ -173,33 +173,38 @@ export function Study() {
     savePack(fresh)
     setAnswered(n => n + 1)
 
-    if (!correct) {
-      // Неправильно: карточка в конец, батч не считаем
-      const newQ = refreshQueueState(fresh, settings.mode, activeDirs, remaining, current)
-      setQueue(newQ)
-      return
-    }
-
-    // Батч: считаем только правильные ответы
+    // Батч: считаем каждый показ карточки (и правильный, и неправильный)
     const bothDirs = settings.directions.de_ru && settings.directions.ru_de
     let nextDirs = activeDirs
     let dirSwitched = false
     if (bothDirs) {
       const newCount = batchCount + 1
-      if (newCount >= batchSize) {
+      if (newCount >= BATCH_SIZE) {
         const newDir: Direction = batchDir === 'de_ru' ? 'ru_de' : 'de_ru'
         nextDirs = { de_ru: newDir === 'de_ru', ru_de: newDir === 'ru_de' }
         dirSwitched = true
         setBatchDir(newDir)
         setBatchCount(0)
-        setBatchSize(5 + Math.floor(Math.random() * 6))
       } else {
         setBatchCount(newCount)
       }
     }
 
+    if (!correct) {
+      if (dirSwitched) {
+        // При смене направления паркуем remaining + wrong-карточку
+        setParkedQueue([...remaining, current])
+        const newQ = refreshQueueState(fresh, settings.mode, nextDirs, parkedQueue)
+        if (newQ.length === 0) setWaiting(true)
+        else setQueue(newQ)
+      } else {
+        const newQ = refreshQueueState(fresh, settings.mode, nextDirs, remaining, current)
+        setQueue(newQ)
+      }
+      return
+    }
+
     if (dirSwitched) {
-      // Паркуем текущий остаток, достаём запаркованный остаток другого направления
       setParkedQueue(remaining)
       const newQ = refreshQueueState(fresh, settings.mode, nextDirs, parkedQueue)
       if (newQ.length === 0) setWaiting(true)
@@ -221,10 +226,8 @@ export function Study() {
     setPhase('session')
 
     const startDir: Direction = Math.random() < 0.5 ? 'de_ru' : 'ru_de'
-    const startSize = 5 + Math.floor(Math.random() * 6)
     setBatchDir(startDir)
     setBatchCount(0)
-    setBatchSize(startSize)
     setParkedQueue([])
 
     const startDirs: Record<Direction, boolean> =
