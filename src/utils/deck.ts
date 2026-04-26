@@ -129,7 +129,44 @@ export function refreshQueueState(
     result = [...result, ...introduced]
   }
 
+  if (result.length === 0) {
+    result = buildCooldownQueue(pack, mode, directions)
+  }
+
   return result
+}
+
+// Карточки в КД, отсортированные по dueDate (ближайшие первые)
+function buildCooldownQueue(
+  pack: Pack,
+  mode: StudyMode,
+  directions: Record<Direction, boolean>
+): QueueItem[] {
+  const items: QueueItem[] = []
+
+  if (mode === 'flashcard') {
+    for (const card of pack.cards) {
+      if (card.flashcard.level > 0 && !isDue(card.flashcard))
+        items.push({ card, direction: pickDir(directions) })
+    }
+  } else if (mode === 'quiz') {
+    for (const card of pack.cards) {
+      if (directions.de_ru && card.quiz.de_ru.level > 0 && !isDue(card.quiz.de_ru))
+        items.push({ card, direction: 'de_ru' })
+      if (directions.ru_de && card.quiz.ru_de.level > 0 && !isDue(card.quiz.ru_de))
+        items.push({ card, direction: 'ru_de' })
+    }
+  } else {
+    for (const card of pack.cards) {
+      if (card.writing.level > 0 && !isDue(card.writing))
+        items.push({ card, direction: 'ru_de' })
+    }
+  }
+
+  return items.sort((a, b) =>
+    new Date(getProgress(a, mode).dueDate!).getTime() -
+    new Date(getProgress(b, mode).dueDate!).getTime()
+  ).slice(0, 3)
 }
 
 // Ближайшее время когда станет due карточка (для waiting state)

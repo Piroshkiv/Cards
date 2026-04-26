@@ -25,7 +25,7 @@ export function QuizCard({ card, direction, options, onAnswer }: QuizCardProps) 
     setTimeout(() => {
       setSelected(null)
       onAnswer(correct)
-    }, 700)
+    }, 1500)
   }
 
   function optionClass(opt: Card): string {
