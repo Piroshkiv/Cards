@@ -211,25 +211,25 @@ describe('isActiveArticle', () => {
 describe('article mode progression', () => {
   const session = 1
 
-  it('correct 1: n=1.6, still active', () => {
+  it('correct 1: n=2.4, still active', () => {
     let p = { n: 0, last_seen_session: session }
     p = applyArticleResult(p, true, session)
-    expect(p.n).toBeCloseTo(1.6)
+    expect(p.n).toBeCloseTo(2.4)
     expect(isActiveArticle(p)).toBe(true)
   })
 
-  it('correct 2: n=2.56, still active', () => {
+  it('correct 2: n=3.84, exits active pool (>3)', () => {
     let p = { n: 0, last_seen_session: session }
     p = applyArticleResult(p, true, session)
     p = applyArticleResult(p, true, session)
-    expect(p.n).toBeCloseTo(2.56)
-    expect(isActiveArticle(p)).toBe(true)
+    expect(p.n).toBeCloseTo(3.84)
+    expect(isActiveArticle(p)).toBe(false)
   })
 
-  it('correct 3: n≈3.14, graduates (>3)', () => {
+  it('correct 3: n≈4.7, well above threshold', () => {
     let p = { n: 0, last_seen_session: session }
     for (let i = 0; i < 3; i++) p = applyArticleResult(p, true, session)
-    expect(p.n).toBeCloseTo(3.136)
+    expect(p.n).toBeCloseTo(4.704)
     expect(isActiveArticle(p)).toBe(false)
   })
 
@@ -240,30 +240,29 @@ describe('article mode progression', () => {
     expect(isActiveArticle(p)).toBe(true)
   })
 
-  it('wrong after graduation re-activates card', () => {
+  it('wrong after 3 corrects re-activates card', () => {
     let p = { n: 0, last_seen_session: session }
     for (let i = 0; i < 3; i++) p = applyArticleResult(p, true, session)
-    expect(isActiveArticle(p)).toBe(false)  // graduated
+    expect(isActiveArticle(p)).toBe(false)  // n=4.7, above threshold
     p = applyArticleResult(p, false, session)
-    expect(p.n).toBeCloseTo(3.136 * 0.4)   // n drops significantly
+    expect(p.n).toBeCloseTo(4.704 * 0.4)   // n drops to ~1.88
     expect(isActiveArticle(p)).toBe(true)   // re-activated
   })
 
-  it('weight after graduation ≈ 0.336 (not too low)', () => {
-    // n=3.14, deckSize=340 → scale=1
-    // weight = 2^(-3.14/2) ≈ 0.336
-    const p = { n: 3.136, last_seen_session: session }
+  it('weight at n=4.7 is low (~0.196)', () => {
+    // 3 corrects → n=4.7, weight = 2^(-4.7/2) ≈ 0.196
+    const p = { n: 4.704, last_seen_session: session }
     const w = cardWeight(p, session, 340)
-    expect(w).toBeGreaterThan(0.3)
-    expect(w).toBeLessThan(0.4)
+    expect(w).toBeGreaterThan(0.17)
+    expect(w).toBeLessThan(0.22)
   })
 
-  it('asymptote weight ≈ 0.25 (target=4)', () => {
-    // converges to n=4: weight = 2^(-2) = 0.25
+  it('asymptote weight ≈ 0.125 (target=6)', () => {
+    // converges to n=6: weight = 2^(-3) = 0.125
     let p = { n: 0, last_seen_session: session }
     for (let i = 0; i < 50; i++) p = applyArticleResult(p, true, session)
-    expect(p.n).toBeCloseTo(4, 1)
-    expect(cardWeight(p, session, 340)).toBeCloseTo(0.25, 1)
+    expect(p.n).toBeCloseTo(6, 1)
+    expect(cardWeight(p, session, 340)).toBeCloseTo(0.125, 1)
   })
 })
 

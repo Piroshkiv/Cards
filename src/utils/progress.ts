@@ -15,7 +15,7 @@ export const WORD_RATINGS: RatingConfig[] = [
 
 export const ARTICLE_RATINGS: RatingConfig[] = [
   { label: 'wrong',   target: 0, alpha: 0.6 },
-  { label: 'correct', target: 4, alpha: 0.4 },
+  { label: 'correct', target: 6, alpha: 0.4 },
 ]
 
 export const ACTIVE_THRESHOLD = 2
