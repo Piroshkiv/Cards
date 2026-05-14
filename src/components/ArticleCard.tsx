@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { Card, Article } from '../types'
-import { speakGerman } from '../utils/tts'
+import { speakGerman, cancelSpeech } from '../utils/tts'
 
 interface ArticleCardProps {
   card: Card
@@ -10,27 +10,32 @@ interface ArticleCardProps {
 
 const ARTICLES: Article[] = ['der', 'die', 'das']
 
-type Phase = 'intro' | 'quiz' | 'flash' | 'correcting'
+type Phase = 'intro' | 'quiz' | 'flash' | 'wrong-flash' | 'correcting'
 
 export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
   const [phase, setPhase] = useState<Phase>(isNew ? 'intro' : 'quiz')
   const [wasWrong, setWasWrong] = useState(false)
+  const [wrongArt, setWrongArt] = useState<Article | null>(null)
 
   useEffect(() => {
     setPhase(isNew ? 'intro' : 'quiz')
     setWasWrong(false)
     speakGerman(isNew ? `${card.article} ${card.word}` : card.word)
+    return () => cancelSpeech()
   }, [card.id])
 
-  function handleSelect(art: Article) {
+  async function handleSelect(art: Article) {
     if (phase !== 'quiz') return
     const correct = art === card.article
-    speakGerman(`${card.article} ${card.word}`)
     if (correct) {
       setPhase('flash')
-      setTimeout(() => onAnswer(!wasWrong), 1000)
+      await speakGerman(`${card.article} ${card.word}`)
+      onAnswer(!wasWrong)
     } else {
       setWasWrong(true)
+      setWrongArt(art)
+      setPhase('wrong-flash')
+      await speakGerman(`${card.article} ${card.word}`)
       setPhase('correcting')
     }
   }
@@ -79,18 +84,26 @@ export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
       </button>
       {card.translation && <div className="quiz-card__sub">{card.translation}</div>}
       <div className="quiz-options">
-        {ARTICLES.map(art => (
-          <button
-            key={art}
-            className={`quiz-option quiz-option--article${
-              phase === 'flash' && art === card.article ? ' quiz-option--correct' : ''
-            }${phase === 'flash' && art !== card.article ? ' quiz-option--dim' : ''}`}
-            onClick={() => handleSelect(art)}
-            disabled={phase !== 'quiz'}
-          >
-            {art}
-          </button>
-        ))}
+        {ARTICLES.map(art => {
+          let extra = ''
+          if (phase === 'flash') {
+            extra = art === card.article ? ' quiz-option--correct' : ' quiz-option--dim'
+          } else if (phase === 'wrong-flash') {
+            if (art === wrongArt)       extra = ' quiz-option--wrong'
+            else if (art === card.article) extra = ' quiz-option--correct'
+            else                           extra = ' quiz-option--dim'
+          }
+          return (
+            <button
+              key={art}
+              className={`quiz-option quiz-option--article${extra}`}
+              onClick={() => handleSelect(art)}
+              disabled={phase !== 'quiz'}
+            >
+              {art}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

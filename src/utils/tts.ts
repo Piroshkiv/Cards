@@ -8,18 +8,23 @@ function getGermanVoice(): SpeechSynthesisVoice | null {
   )
 }
 
-export function speakGerman(text: string): void {
-  if (!window.speechSynthesis) return
-  window.speechSynthesis.cancel()
+export function speakGerman(text: string): Promise<void> {
+  return new Promise(resolve => {
+    if (!window.speechSynthesis) { resolve(); return }
+    window.speechSynthesis.cancel()
 
-  const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = 'de-DE'
-  utterance.rate = 0.9
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'de-DE'
+    utterance.rate = 0.9
 
-  const voice = getGermanVoice()
-  if (voice) utterance.voice = voice
+    const voice = getGermanVoice()
+    if (voice) utterance.voice = voice
 
-  window.speechSynthesis.speak(utterance)
+    utterance.onend = () => resolve()
+    utterance.onerror = () => resolve()
+
+    window.speechSynthesis.speak(utterance)
+  })
 }
 
 export function cancelSpeech(): void {
