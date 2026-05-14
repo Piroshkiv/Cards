@@ -66,11 +66,14 @@ export function PackDetail() {
     }
     const card: Card = {
       id: crypto.randomUUID(),
+      article: '',
       word,
+      plural: '',
       translation,
       flashcard: defaultProgress(),
       quiz: { de_ru: defaultProgress(), ru_de: defaultProgress() },
       writing: defaultProgress(),
+      article_prog: defaultProgress(),
     }
     save({ ...pack!, cards: [...pack!.cards, card] })
     setNewWord('')

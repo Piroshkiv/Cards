@@ -1,8 +1,5 @@
-let currentUtterance: SpeechSynthesisUtterance | null = null
-
 function getGermanVoice(): SpeechSynthesisVoice | null {
   const voices = window.speechSynthesis.getVoices()
-  // Prefer online neural voices, then any de-DE, then de voice
   return (
     voices.find(v => v.lang === 'de-DE' && v.name.toLowerCase().includes('neural')) ??
     voices.find(v => v.lang === 'de-DE') ??
@@ -14,7 +11,6 @@ function getGermanVoice(): SpeechSynthesisVoice | null {
 export function speakGerman(text: string): void {
   if (!window.speechSynthesis) return
   window.speechSynthesis.cancel()
-  currentUtterance = null
 
   const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'de-DE'
@@ -23,13 +19,11 @@ export function speakGerman(text: string): void {
   const voice = getGermanVoice()
   if (voice) utterance.voice = voice
 
-  currentUtterance = utterance
   window.speechSynthesis.speak(utterance)
 }
 
 export function cancelSpeech(): void {
   window.speechSynthesis?.cancel()
-  currentUtterance = null
 }
 
 // Voices load async on some browsers — call once on app start
