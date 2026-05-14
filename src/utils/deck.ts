@@ -15,7 +15,7 @@ function itemKey(card: Card, mode: StudyMode, direction: Direction): string {
   return card.id
 }
 
-function isArticleCard(card: Card): boolean {
+export function isArticleCard(card: Card): boolean {
   return card.article === 'der' || card.article === 'die' || card.article === 'das'
 }
 

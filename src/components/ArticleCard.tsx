@@ -6,13 +6,14 @@ interface ArticleCardProps {
   card: Card
   isNew: boolean
   onAnswer: (correct: boolean) => void
+  onIntro: () => void
 }
 
 const ARTICLES: Article[] = ['der', 'die', 'das']
 
 type Phase = 'intro' | 'quiz' | 'flash' | 'wrong-flash' | 'correcting'
 
-export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
+export function ArticleCard({ card, isNew, onAnswer, onIntro }: ArticleCardProps) {
   const [phase, setPhase] = useState<Phase>(isNew ? 'intro' : 'quiz')
   const [wasWrong, setWasWrong] = useState(false)
   const [wrongArt, setWrongArt] = useState<Article | null>(null)
@@ -20,6 +21,7 @@ export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
   useEffect(() => {
     setPhase(isNew ? 'intro' : 'quiz')
     setWasWrong(false)
+    setWrongArt(null)
     speakGerman(isNew ? `${card.article} ${card.word}` : card.word)
     return () => cancelSpeech()
   }, [card.id])
@@ -40,7 +42,7 @@ export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
     }
   }
 
-  function handleOK() {
+  function handleOKCorrection() {
     setPhase('quiz')
     speakGerman(card.word)
   }
@@ -56,24 +58,41 @@ export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
     </div>
   )
 
-  if (phase === 'intro' || phase === 'correcting') {
+  // ── Intro screen (new word) ────────────────────────────────────────────────
+  if (phase === 'intro') {
     return (
       <div className="quiz-card">
         <div className="quiz-card__meta">
-          <span className={`quiz-card__direction ${phase === 'intro' ? 'article-new-badge' : ''}`}>
-            {phase === 'intro' ? 'Новое слово' : 'Артикль'}
-          </span>
+          <span className="quiz-card__direction article-new-badge">Новое слово</span>
         </div>
         <button className="quiz-card__question quiz-card__question--speak" onClick={speakCurrent} title="Произнести">
           {displayWord} 🔊
         </button>
         {card.translation && <div className="quiz-card__sub">{card.translation}</div>}
         {fullForm}
-        <button className="article-ok-btn" onClick={handleOK}>OK</button>
+        <button className="article-ok-btn" onClick={onIntro}>OK</button>
       </div>
     )
   }
 
+  // ── Correction screen (wrong answer) ──────────────────────────────────────
+  if (phase === 'correcting') {
+    return (
+      <div className="quiz-card">
+        <div className="quiz-card__meta">
+          <span className="quiz-card__direction">Артикль</span>
+        </div>
+        <button className="quiz-card__question quiz-card__question--speak" onClick={speakCurrent} title="Произнести">
+          {displayWord} 🔊
+        </button>
+        {card.translation && <div className="quiz-card__sub">{card.translation}</div>}
+        {fullForm}
+        <button className="article-ok-btn" onClick={handleOKCorrection}>OK</button>
+      </div>
+    )
+  }
+
+  // ── Quiz screen ───────────────────────────────────────────────────────────
   return (
     <div className="quiz-card">
       <div className="quiz-card__meta">
@@ -89,7 +108,7 @@ export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
           if (phase === 'flash') {
             extra = art === card.article ? ' quiz-option--correct' : ' quiz-option--dim'
           } else if (phase === 'wrong-flash') {
-            if (art === wrongArt)       extra = ' quiz-option--wrong'
+            if (art === wrongArt)          extra = ' quiz-option--wrong'
             else if (art === card.article) extra = ' quiz-option--correct'
             else                           extra = ' quiz-option--dim'
           }

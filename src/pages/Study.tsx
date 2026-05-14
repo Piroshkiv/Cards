@@ -7,7 +7,7 @@ import {
 } from '../utils/storage'
 import { applyWordGrade, applyQuizResult } from '../utils/progress'
 import {
-  ensureMinActive, pickNextItem, getSessionStatus, getWrongOptions,
+  ensureMinActive, pickNextItem, getSessionStatus, getWrongOptions, isArticleCard,
   type QueueItem,
 } from '../utils/deck'
 import { FlashCard } from '../components/FlashCard'
@@ -44,8 +44,8 @@ export function Study() {
   const [answered, setAnswered] = useState(0)
   const [currentSession, setCurrentSession] = useState(getCurrentSession)
 
-  // Track which article cards have already been seen in this session (for isNew detection)
-  const seenArticleIds = useRef(new Set<string>())
+  // Cards truly new (last_seen_session===0 before introduction this session)
+  const brandNewIds = useRef(new Set<string>())
 
   // Quiz batch: 10 cards per direction before switching
   const BATCH_SIZE = 10
@@ -78,7 +78,23 @@ export function Study() {
     session: number,
     excludeKey?: string,
   ): void {
-    ensureMinActive(freshPack, settings.mode, dirs, session)
+    if (settings.mode === 'article') {
+      // Snapshot which article cards are truly unseen before ensureMinActive introduces one
+      const neverSeen = new Set(
+        freshPack.cards
+          .filter(c => isArticleCard(c) && c.article_prog.last_seen_session === 0)
+          .map(c => c.id)
+      )
+      ensureMinActive(freshPack, settings.mode, dirs, session)
+      // Whatever card was just introduced (last_seen_session flipped from 0) is brand new
+      for (const c of freshPack.cards) {
+        if (neverSeen.has(c.id) && c.article_prog.last_seen_session > 0) {
+          brandNewIds.current.add(c.id)
+        }
+      }
+    } else {
+      ensureMinActive(freshPack, settings.mode, dirs, session)
+    }
     const next = pickNextItem(freshPack, settings.mode, dirs, session, excludeKey)
     setQueue(next ? [next] : [])
   }
@@ -102,6 +118,20 @@ export function Study() {
     }
     savePack(fresh)
     setAnswered(n => n + 1)
+    pickNext(fresh, activeDirs, currentSession, cardKey(current))
+  }
+
+  // ─── Article intro (new word shown, user clicks OK) ───────────────────────
+
+  function handleArticleIntro() {
+    if (!current) return
+    const fresh = getPack(id!)!
+    const card  = fresh.cards.find(c => c.id === current.card.id)!
+    // Assign small starting n so word comes back for review but isn't looped immediately
+    card.article_prog = { n: 1.5, last_seen_session: currentSession }
+    savePack(fresh)
+    setAnswered(n => n + 1)
+    brandNewIds.current.delete(current.card.id)
     pickNext(fresh, activeDirs, currentSession, cardKey(current))
   }
 
@@ -154,7 +184,7 @@ export function Study() {
   function handleStart() {
     saveStudySettings(id!, settings)
     setAnswered(0)
-    seenArticleIds.current = new Set()
+    brandNewIds.current = new Set()
     setPhase('session')
 
     const session = incrementSession()
@@ -309,18 +339,15 @@ export function Study() {
                 onGrade={applyAnswer}
               />
             )}
-            {settings.mode === 'article' && (() => {
-              const isNew = !seenArticleIds.current.has(current.card.id)
-              if (isNew) seenArticleIds.current.add(current.card.id)
-              return (
-                <ArticleCard
-                  key={current.card.id}
-                  card={current.card}
-                  isNew={isNew}
-                  onAnswer={handleArticleAnswer}
-                />
-              )
-            })()}
+            {settings.mode === 'article' && (
+              <ArticleCard
+                key={current.card.id}
+                card={current.card}
+                isNew={brandNewIds.current.has(current.card.id)}
+                onAnswer={handleArticleAnswer}
+                onIntro={handleArticleIntro}
+              />
+            )}
           </>
         ) : (
           <div className="waiting-state card">
