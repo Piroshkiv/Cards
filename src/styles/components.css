@@ -347,6 +347,43 @@
 }
 .quiz-card__question--speak:hover { opacity: 0.75; }
 
+/* Article correction screen */
+.article-correction {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  background: #e6f7ef;
+  border: 2px solid var(--success);
+  border-radius: var(--radius-card);
+  padding: 20px 24px;
+  margin-top: 8px;
+}
+.article-correction__article {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--success);
+}
+.article-correction__word {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text);
+}
+.article-ok-btn {
+  width: 100%;
+  padding: 16px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-card);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: background 0.15s;
+}
+.article-ok-btn:hover { background: var(--primary-h); }
+
 /* ─── Writing ────────────────────────────────────────────────────────────── */
 .writing-card {
   width: 100%;
