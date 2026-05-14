@@ -4,28 +4,28 @@ import { speakGerman } from '../utils/tts'
 
 interface ArticleCardProps {
   card: Card
+  isNew: boolean
   onAnswer: (correct: boolean) => void
 }
 
 const ARTICLES: Article[] = ['der', 'die', 'das']
 
-type Phase = 'quiz' | 'flash' | 'correcting'
+type Phase = 'intro' | 'quiz' | 'flash' | 'correcting'
 
-export function ArticleCard({ card, onAnswer }: ArticleCardProps) {
-  const [phase, setPhase] = useState<Phase>('quiz')
+export function ArticleCard({ card, isNew, onAnswer }: ArticleCardProps) {
+  const [phase, setPhase] = useState<Phase>(isNew ? 'intro' : 'quiz')
   const [wasWrong, setWasWrong] = useState(false)
 
   useEffect(() => {
-    speakGerman(card.word)
-    setPhase('quiz')
+    setPhase(isNew ? 'intro' : 'quiz')
     setWasWrong(false)
+    speakGerman(isNew ? `${card.article} ${card.word}` : card.word)
   }, [card.id])
 
   function handleSelect(art: Article) {
     if (phase !== 'quiz') return
     const correct = art === card.article
     speakGerman(`${card.article} ${card.word}`)
-
     if (correct) {
       setPhase('flash')
       setTimeout(() => onAnswer(!wasWrong), 1000)
@@ -41,25 +41,30 @@ export function ArticleCard({ card, onAnswer }: ArticleCardProps) {
   }
 
   const displayWord = card.plural ? `${card.word} / ${card.plural}` : card.word
-  const speakCurrent = () => speakGerman(phase === 'correcting' ? `${card.article} ${card.word}` : card.word)
+  const speakCurrent = () =>
+    speakGerman(phase === 'quiz' || phase === 'flash' ? card.word : `${card.article} ${card.word}`)
 
-  if (phase === 'correcting') {
+  const fullForm = (
+    <div className="article-correction">
+      <span className="article-correction__article">{card.article}</span>
+      <span className="article-correction__word">{card.word}</span>
+    </div>
+  )
+
+  if (phase === 'intro' || phase === 'correcting') {
     return (
       <div className="quiz-card">
         <div className="quiz-card__meta">
-          <span className="quiz-card__direction">Артикль</span>
+          <span className={`quiz-card__direction ${phase === 'intro' ? 'article-new-badge' : ''}`}>
+            {phase === 'intro' ? 'Новое слово' : 'Артикль'}
+          </span>
         </div>
         <button className="quiz-card__question quiz-card__question--speak" onClick={speakCurrent} title="Произнести">
           {displayWord} 🔊
         </button>
         {card.translation && <div className="quiz-card__sub">{card.translation}</div>}
-        <div className="article-correction">
-          <span className="article-correction__article">{card.article}</span>
-          <span className="article-correction__word">{card.word}</span>
-        </div>
-        <button className="article-ok-btn" onClick={handleOK}>
-          OK — попробую ещё раз
-        </button>
+        {fullForm}
+        <button className="article-ok-btn" onClick={handleOK}>OK</button>
       </div>
     )
   }

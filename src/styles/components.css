@@ -347,6 +347,15 @@
 }
 .quiz-card__question--speak:hover { opacity: 0.75; }
 
+/* Article new-word badge */
+.article-new-badge {
+  color: var(--primary) !important;
+  background: var(--primary-bg);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
 /* Article correction screen */
 .article-correction {
   display: flex;

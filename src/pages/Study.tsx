@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { X, ArrowLeft } from 'lucide-react'
 import {
@@ -43,6 +43,9 @@ export function Study() {
   const [queue, setQueue]       = useState<QueueItem[]>([])
   const [answered, setAnswered] = useState(0)
   const [currentSession, setCurrentSession] = useState(getCurrentSession)
+
+  // Track which article cards have already been seen in this session (for isNew detection)
+  const seenArticleIds = useRef(new Set<string>())
 
   // Quiz batch: 10 cards per direction before switching
   const BATCH_SIZE = 10
@@ -151,6 +154,7 @@ export function Study() {
   function handleStart() {
     saveStudySettings(id!, settings)
     setAnswered(0)
+    seenArticleIds.current = new Set()
     setPhase('session')
 
     const session = incrementSession()
@@ -305,13 +309,18 @@ export function Study() {
                 onGrade={applyAnswer}
               />
             )}
-            {settings.mode === 'article' && (
-              <ArticleCard
-                key={current.card.id}
-                card={current.card}
-                onAnswer={handleArticleAnswer}
-              />
-            )}
+            {settings.mode === 'article' && (() => {
+              const isNew = !seenArticleIds.current.has(current.card.id)
+              if (isNew) seenArticleIds.current.add(current.card.id)
+              return (
+                <ArticleCard
+                  key={current.card.id}
+                  card={current.card}
+                  isNew={isNew}
+                  onAnswer={handleArticleAnswer}
+                />
+              )
+            })()}
           </>
         ) : (
           <div className="waiting-state card">
