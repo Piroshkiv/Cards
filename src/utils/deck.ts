@@ -50,15 +50,15 @@ export function ensureMinActive(
   if (countActive(pack, mode, directions) >= MIN_ACTIVE) return
 
   if (mode === 'flashcard') {
-    const card = pack.cards.find(c => !isIntroduced(c.flashcard))
+    const card = pickRandom(pack.cards.filter(c => !isIntroduced(c.flashcard)))
     if (!card) return
     card.flashcard = introduceCard(currentSession)
     savePack(pack)
   } else if (mode === 'quiz') {
-    const card = pack.cards.find(c =>
+    const card = pickRandom(pack.cards.filter(c =>
       (directions.de_ru && !isIntroduced(c.quiz.de_ru)) ||
       (directions.ru_de && !isIntroduced(c.quiz.ru_de)),
-    )
+    ))
     if (!card) return
     if (directions.de_ru && !isIntroduced(card.quiz.de_ru))
       card.quiz.de_ru = introduceCard(currentSession)
@@ -66,12 +66,12 @@ export function ensureMinActive(
       card.quiz.ru_de = introduceCard(currentSession)
     savePack(pack)
   } else if (mode === 'article') {
-    const card = pack.cards.find(c => isArticleCard(c) && !isIntroduced(c.article_prog))
+    const card = pickRandom(pack.cards.filter(c => isArticleCard(c) && !isIntroduced(c.article_prog)))
     if (!card) return
     card.article_prog = introduceCard(currentSession)
     savePack(pack)
   } else {
-    const card = pack.cards.find(c => !isIntroduced(c.writing))
+    const card = pickRandom(pack.cards.filter(c => !isIntroduced(c.writing)))
     if (!card) return
     card.writing = introduceCard(currentSession)
     savePack(pack)
@@ -230,4 +230,9 @@ function shuffle<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+function pickRandom<T>(arr: T[]): T | undefined {
+  if (arr.length === 0) return undefined
+  return arr[Math.floor(Math.random() * arr.length)]
 }

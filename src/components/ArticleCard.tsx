@@ -39,12 +39,16 @@ export function ArticleCard({ card, onAnswer }: ArticleCardProps) {
     ? `${card.word} / ${card.plural}`
     : card.word
 
+  const speakCurrent = () => speakGerman(selected ? `${card.article} ${card.word}` : card.word)
+
   return (
     <div className="quiz-card">
       <div className="quiz-card__meta">
         <span className="quiz-card__direction">Артикль</span>
       </div>
-      <div className="quiz-card__question">{displayWord}</div>
+      <button className="quiz-card__question quiz-card__question--speak" onClick={speakCurrent} title="Произнести ещё раз">
+        {displayWord} 🔊
+      </button>
       {card.translation && (
         <div className="quiz-card__sub">{card.translation}</div>
       )}
