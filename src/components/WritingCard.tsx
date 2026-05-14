@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { Card, Grade } from '../types'
 import { generateTiles, getTileSize, type Tile } from '../utils/german'
-import { LEVEL_LABELS } from '../utils/progress'
 
 interface WritingCardProps {
   card: Card
@@ -39,7 +38,6 @@ export function WritingCard({ card, onGrade }: WritingCardProps) {
     <div className="writing-card">
       <div className="writing-card__meta">
         <span className="writing-card__direction">RU → DE</span>
-        <span className="writing-card__level">{LEVEL_LABELS[card.writing.level]}</span>
       </div>
       <div className="writing-card__question">{card.translation}</div>
 

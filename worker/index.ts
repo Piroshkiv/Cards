@@ -41,6 +41,15 @@ export default {
         const body = await request.json() as SubscribeBody
         return handleUnsubscribe(env, parts[2], body)
       }
+      // GET /api/progress/:packId/:username
+      if (request.method === 'GET' && parts.length === 4 && parts[1] === 'progress') {
+        return handleGetProgress(env, parts[2], parts[3])
+      }
+      // PUT /api/progress/:packId/:username
+      if (request.method === 'PUT' && parts.length === 4 && parts[1] === 'progress') {
+        const body = await request.json() as ProgressBody
+        return handlePutProgress(env, parts[2], parts[3], body)
+      }
       return json({ error: 'Not found' }, 404)
     } catch (e) {
       return json({ error: String(e) }, 500)
@@ -100,7 +109,9 @@ async function handleGetPack(env: Env, id: string): Promise<Response> {
 
 interface SyncCard {
   id: string
+  article: string
   word: string
+  plural: string
   translation: string
 }
 
@@ -158,5 +169,31 @@ async function handleUnsubscribe(env: Env, id: string, body: SubscribeBody): Pro
   if ((remaining?.cnt ?? 0) === 0) {
     await env.DB.prepare('DELETE FROM packs WHERE id = ?').bind(id).run()
   }
+  return json({ ok: true })
+}
+
+interface ProgressBody {
+  progress: Record<string, unknown>
+  updated_at: string
+}
+
+async function handleGetProgress(env: Env, packId: string, username: string): Promise<Response> {
+  const row = await env.DB.prepare(
+    'SELECT progress, updated_at FROM user_progress WHERE pack_id = ? AND username = ?'
+  ).bind(packId, username).first<{ progress: string; updated_at: string }>()
+  if (!row) return json({ progress: {}, updated_at: '' })
+  return json({ progress: JSON.parse(row.progress), updated_at: row.updated_at })
+}
+
+async function handlePutProgress(env: Env, packId: string, username: string, body: ProgressBody): Promise<Response> {
+  const { progress, updated_at } = body
+  await env.DB.prepare(`
+    INSERT INTO user_progress (pack_id, username, progress, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(pack_id, username) DO UPDATE SET
+      progress = excluded.progress,
+      updated_at = excluded.updated_at
+    WHERE excluded.updated_at >= user_progress.updated_at
+  `).bind(packId, username, JSON.stringify(progress), updated_at).run()
   return json({ ok: true })
 }

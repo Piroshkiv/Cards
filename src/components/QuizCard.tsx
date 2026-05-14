@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import type { Card, Direction } from '../types'
-import { LEVEL_LABELS } from '../utils/progress'
 
 interface QuizCardProps {
   card: Card
   direction: Direction
-  options: Card[]   // 4 штуки (правильный + 3 неправильных), перемешаны снаружи
+  options: Card[]
   onAnswer: (correct: boolean) => void
 }
 
@@ -15,7 +14,6 @@ export function QuizCard({ card, direction, options, onAnswer }: QuizCardProps) 
   const question     = direction === 'de_ru' ? card.word : card.translation
   const correctLabel = direction === 'de_ru' ? card.translation : card.word
   const getLabel     = (c: Card) => direction === 'de_ru' ? c.translation : c.word
-  const level        = direction === 'de_ru' ? card.quiz.de_ru.level : card.quiz.ru_de.level
 
   function handleSelect(opt: Card) {
     if (selected !== null) return
@@ -40,7 +38,6 @@ export function QuizCard({ card, direction, options, onAnswer }: QuizCardProps) 
     <div className="quiz-card">
       <div className="quiz-card__meta">
         <span className="quiz-card__direction">{direction === 'de_ru' ? 'DE → RU' : 'RU → DE'}</span>
-        <span className="quiz-card__level">{LEVEL_LABELS[level]}</span>
       </div>
       <div className="quiz-card__question">{question}</div>
       <div className="quiz-options">

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { BookOpen, Trash2, Play, LogOut } from 'lucide-react'
 import type { Pack } from '../types'
-import { countDueToday, avgMasteryPercent } from '../utils/deck'
+import { countActiveCards, avgMasteryPercent } from '../utils/deck'
 
 interface PackCardProps {
   pack: Pack
@@ -11,7 +11,7 @@ interface PackCardProps {
 }
 
 export function PackCard({ pack, isOwner, onDelete, onUnsubscribe }: PackCardProps) {
-  const due     = countDueToday(pack.cards)
+  const active  = countActiveCards(pack.cards)
   const mastery = avgMasteryPercent(pack.cards)
 
   return (
@@ -24,7 +24,7 @@ export function PackCard({ pack, isOwner, onDelete, onUnsubscribe }: PackCardPro
           <Link to={`/packs/${pack.id}`} className="pack-card__name">{pack.name}</Link>
           <div className="pack-card__meta">
             <span>{pack.cards.length} слов</span>
-            {due > 0 && <span className="pack-card__due">{due} к повторению</span>}
+            {active > 0 && <span className="pack-card__due">{active} активных</span>}
             {pack.cards.length > 0 && (
               <span className="pack-card__learned">{mastery}% освоено</span>
             )}

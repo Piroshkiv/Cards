@@ -1,5 +1,8 @@
-import type { Card, CardProgress, StudyMode, Direction, Pack } from '../types'
-import { isDue, introduceCard } from './progress'
+import type { Card, StudyMode, Direction, Pack } from '../types'
+import {
+  isIntroduced, isActive, cardWeight, introduceCard,
+  MIN_ACTIVE,
+} from './progress'
 import { getPacks, savePack } from './storage'
 
 export interface QueueItem {
@@ -7,234 +10,180 @@ export interface QueueItem {
   direction: Direction
 }
 
-const INTRODUCE_THRESHOLD = 3
-
-// Все due-элементы из хранилища, отсортированные по dueDate (давнишние первые)
-export function buildDueQueue(
-  pack: Pack,
-  mode: StudyMode,
-  directions: Record<Direction, boolean>
-): QueueItem[] {
-  const items: QueueItem[] = []
-
-  if (mode === 'flashcard') {
-    for (const card of pack.cards) {
-      if (isDue(card.flashcard))
-        items.push({ card, direction: pickDir(directions) })
-    }
-  } else if (mode === 'quiz') {
-    for (const card of pack.cards) {
-      if (directions.de_ru && isDue(card.quiz.de_ru))
-        items.push({ card, direction: 'de_ru' })
-      if (directions.ru_de && isDue(card.quiz.ru_de))
-        items.push({ card, direction: 'ru_de' })
-    }
-  } else {
-    for (const card of pack.cards) {
-      if (isDue(card.writing))
-        items.push({ card, direction: 'ru_de' })
-    }
-  }
-
-  return items.sort((a, b) =>
-    new Date(getProgress(a, mode).dueDate!).getTime() -
-    new Date(getProgress(b, mode).dueDate!).getTime()
-  )
+function itemKey(card: Card, mode: StudyMode, direction: Direction): string {
+  if (mode === 'quiz') return `${card.id}::${direction}`
+  return card.id
 }
 
-// Вводит одно новое слово и возвращает его как QueueItem[].
-// Мутирует pack и сохраняет.
-export function introduceToQueue(
-  pack: Pack,
-  mode: StudyMode,
-  directions: Record<Direction, boolean>
-): QueueItem[] {
-  if (mode === 'flashcard') {
-    const card = pack.cards.find(c => c.flashcard.level === 0)
-    if (!card) return []
-    card.flashcard = introduceCard()
-    savePack(pack)
-    return [{ card, direction: pickDir(directions) }]
-  } else if (mode === 'quiz') {
-    const card = pack.cards.find(c =>
-      (directions.de_ru && c.quiz.de_ru.level === 0) ||
-      (directions.ru_de && c.quiz.ru_de.level === 0)
-    )
-    if (!card) return []
-    const added: QueueItem[] = []
-    if (directions.de_ru && card.quiz.de_ru.level === 0) {
-      card.quiz.de_ru = introduceCard()
-      added.push({ card, direction: 'de_ru' })
-    }
-    if (directions.ru_de && card.quiz.ru_de.level === 0) {
-      card.quiz.ru_de = introduceCard()
-      added.push({ card, direction: 'ru_de' })
-    }
-    savePack(pack)
-    return added
-  } else {
-    const card = pack.cards.find(c => c.writing.level === 0)
-    if (!card) return []
-    card.writing = introduceCard()
-    savePack(pack)
-    return [{ card, direction: 'ru_de' }]
-  }
+function isArticleCard(card: Card): boolean {
+  return card.article === 'der' || card.article === 'die' || card.article === 'das'
 }
 
-function itemKey(item: QueueItem) {
-  return `${item.card.id}::${item.direction}`
-}
-
-/**
- * Перестройка очереди после ответа.
- *
- * Порядок результирующей очереди:
- *   1. due-карточки из хранилища, которых ещё нет в очереди (вставляются спереди)
- *   2. существующие элементы очереди (remaining после удаления текущего)
- *   3. если grade === 0 (Again): текущая карточка помещается в конец
- *   4. новое слово в конец если итого < 3
- *
- * Параметры:
- *   pack      — свежий пак из хранилища (ПОСЛЕ сохранения ответа)
- *   remaining — очередь без первого элемента (queue.slice(1))
- *   againItem — передать если grade === 0
- */
-export function refreshQueueState(
+function countActive(
   pack: Pack,
   mode: StudyMode,
   directions: Record<Direction, boolean>,
-  remaining: QueueItem[],
-  againItem?: QueueItem
-): QueueItem[] {
-  // Ключи уже присутствующих в очереди (+ Again если есть)
-  const inQueue = new Set([
-    ...remaining.map(itemKey),
-    ...(againItem ? [itemKey(againItem)] : []),
-  ])
-
-  // Новые due-карточки из хранилища которых ещё нет в очереди
-  const newDue = buildDueQueue(pack, mode, directions)
-    .filter(i => !inQueue.has(itemKey(i)))
-
-  // Собираем: [newDue..., remaining..., again?]
-  let result: QueueItem[] = [
-    ...newDue,
-    ...remaining,
-    ...(againItem ? [againItem] : []),
-  ]
-
-  // Добавляем новое слово в конец если очередь < порога
-  if (result.length < INTRODUCE_THRESHOLD) {
-    const introduced = introduceToQueue(pack, mode, directions)
-    result = [...result, ...introduced]
+): number {
+  let count = 0
+  for (const card of pack.cards) {
+    if (mode === 'flashcard') {
+      if (isActive(card.flashcard)) count++
+    } else if (mode === 'quiz') {
+      if (directions.de_ru && isActive(card.quiz.de_ru)) count++
+      if (directions.ru_de && isActive(card.quiz.ru_de)) count++
+    } else if (mode === 'article') {
+      if (isArticleCard(card) && isActive(card.article_prog)) count++
+    } else {
+      if (isActive(card.writing)) count++
+    }
   }
-
-  if (result.length === 0) {
-    result = buildCooldownQueue(pack, mode, directions)
-  }
-
-  return result
+  return count
 }
 
-// Карточки в КД, отсортированные по dueDate (ближайшие первые)
-function buildCooldownQueue(
+// Introduce one new card if active count < MIN_ACTIVE. Mutates pack and saves.
+export function ensureMinActive(
   pack: Pack,
   mode: StudyMode,
-  directions: Record<Direction, boolean>
-): QueueItem[] {
-  const items: QueueItem[] = []
+  directions: Record<Direction, boolean>,
+  currentSession: number,
+): void {
+  if (countActive(pack, mode, directions) >= MIN_ACTIVE) return
 
   if (mode === 'flashcard') {
-    for (const card of pack.cards) {
-      if (card.flashcard.level > 0 && !isDue(card.flashcard))
-        items.push({ card, direction: pickDir(directions) })
-    }
+    const card = pack.cards.find(c => !isIntroduced(c.flashcard))
+    if (!card) return
+    card.flashcard = introduceCard(currentSession)
+    savePack(pack)
   } else if (mode === 'quiz') {
-    for (const card of pack.cards) {
-      if (directions.de_ru && card.quiz.de_ru.level > 0 && !isDue(card.quiz.de_ru))
-        items.push({ card, direction: 'de_ru' })
-      if (directions.ru_de && card.quiz.ru_de.level > 0 && !isDue(card.quiz.ru_de))
-        items.push({ card, direction: 'ru_de' })
-    }
+    const card = pack.cards.find(c =>
+      (directions.de_ru && !isIntroduced(c.quiz.de_ru)) ||
+      (directions.ru_de && !isIntroduced(c.quiz.ru_de)),
+    )
+    if (!card) return
+    if (directions.de_ru && !isIntroduced(card.quiz.de_ru))
+      card.quiz.de_ru = introduceCard(currentSession)
+    if (directions.ru_de && !isIntroduced(card.quiz.ru_de))
+      card.quiz.ru_de = introduceCard(currentSession)
+    savePack(pack)
+  } else if (mode === 'article') {
+    const card = pack.cards.find(c => isArticleCard(c) && !isIntroduced(c.article_prog))
+    if (!card) return
+    card.article_prog = introduceCard(currentSession)
+    savePack(pack)
   } else {
-    for (const card of pack.cards) {
-      if (card.writing.level > 0 && !isDue(card.writing))
-        items.push({ card, direction: 'ru_de' })
-    }
+    const card = pack.cards.find(c => !isIntroduced(c.writing))
+    if (!card) return
+    card.writing = introduceCard(currentSession)
+    savePack(pack)
   }
-
-  return items.sort((a, b) =>
-    new Date(getProgress(a, mode).dueDate!).getTime() -
-    new Date(getProgress(b, mode).dueDate!).getTime()
-  ).slice(0, 3)
 }
 
-// Ближайшее время когда станет due карточка (для waiting state)
-export function getNextDueTime(
+// Weighted random pick from all introduced cards (excluding excludeKey to avoid immediate repeat)
+export function pickNextItem(
   pack: Pack,
   mode: StudyMode,
-  directions: Record<Direction, boolean>
-): Date | null {
-  const dates: Date[] = []
+  directions: Record<Direction, boolean>,
+  currentSession: number,
+  excludeKey?: string,
+): QueueItem | null {
+  const candidates: Array<{ item: QueueItem; weight: number }> = []
+  const deckSize = pack.cards.length
+
   for (const card of pack.cards) {
-    if (mode === 'flashcard' && card.flashcard.level > 0 && card.flashcard.dueDate)
-      dates.push(new Date(card.flashcard.dueDate))
-    else if (mode === 'quiz') {
-      if (directions.de_ru && card.quiz.de_ru.level > 0 && card.quiz.de_ru.dueDate)
-        dates.push(new Date(card.quiz.de_ru.dueDate))
-      if (directions.ru_de && card.quiz.ru_de.level > 0 && card.quiz.ru_de.dueDate)
-        dates.push(new Date(card.quiz.ru_de.dueDate))
-    } else if (mode === 'writing' && card.writing.level > 0 && card.writing.dueDate)
-      dates.push(new Date(card.writing.dueDate))
+    if (mode === 'flashcard') {
+      if (!isIntroduced(card.flashcard)) continue
+      const dir = pickDir(directions)
+      const key = itemKey(card, mode, dir)
+      if (key === excludeKey) continue
+      candidates.push({
+        item: { card, direction: dir },
+        weight: cardWeight(card.flashcard, currentSession, deckSize),
+      })
+    } else if (mode === 'quiz') {
+      for (const dir of (['de_ru', 'ru_de'] as Direction[])) {
+        if (!directions[dir]) continue
+        const prog = dir === 'de_ru' ? card.quiz.de_ru : card.quiz.ru_de
+        if (!isIntroduced(prog)) continue
+        const key = itemKey(card, mode, dir)
+        if (key === excludeKey) continue
+        candidates.push({
+          item: { card, direction: dir },
+          weight: cardWeight(prog, currentSession, deckSize),
+        })
+      }
+    } else if (mode === 'article') {
+      if (!isArticleCard(card) || !isIntroduced(card.article_prog)) continue
+      const key = itemKey(card, mode, 'de_ru')
+      if (key === excludeKey) continue
+      candidates.push({
+        item: { card, direction: 'de_ru' },
+        weight: cardWeight(card.article_prog, currentSession, deckSize),
+      })
+    } else {
+      if (!isIntroduced(card.writing)) continue
+      const key = itemKey(card, mode, 'ru_de')
+      if (key === excludeKey) continue
+      candidates.push({
+        item: { card, direction: 'ru_de' },
+        weight: cardWeight(card.writing, currentSession, deckSize),
+      })
+    }
   }
-  const future = dates.filter(d => d > new Date())
-  if (future.length === 0) return null
-  return new Date(Math.min(...future.map(d => d.getTime())))
+
+  if (candidates.length === 0) return null
+
+  const total = candidates.reduce((s, c) => s + c.weight, 0)
+  let rand = Math.random() * total
+  for (const c of candidates) {
+    rand -= c.weight
+    if (rand <= 0) return c.item
+  }
+  return candidates[candidates.length - 1].item
 }
 
-// Статус для шапки сессии
 export interface SessionStatus {
-  due: number
-  cooldown: number
-  notStarted: number
+  active: number
+  newCards: number
 }
 
 export function getSessionStatus(
   pack: Pack,
   mode: StudyMode,
-  directions: Record<Direction, boolean>
+  directions: Record<Direction, boolean>,
 ): SessionStatus {
-  let due = 0, cooldown = 0, notStarted = 0
+  let active = 0
+  let newCards = 0
+
   for (const c of pack.cards) {
     if (mode === 'flashcard') {
-      if (c.flashcard.level === 0) notStarted++
-      else if (isDue(c.flashcard)) due++
-      else cooldown++
+      if (isActive(c.flashcard)) active++
+      else if (!isIntroduced(c.flashcard)) newCards++
     } else if (mode === 'quiz') {
       if (directions.de_ru) {
-        if (c.quiz.de_ru.level === 0) notStarted++
-        else if (isDue(c.quiz.de_ru)) due++
-        else cooldown++
+        if (isActive(c.quiz.de_ru)) active++
+        else if (!isIntroduced(c.quiz.de_ru)) newCards++
       }
       if (directions.ru_de) {
-        if (c.quiz.ru_de.level === 0) notStarted++
-        else if (isDue(c.quiz.ru_de)) due++
-        else cooldown++
+        if (isActive(c.quiz.ru_de)) active++
+        else if (!isIntroduced(c.quiz.ru_de)) newCards++
       }
+    } else if (mode === 'article') {
+      if (!isArticleCard(c)) continue
+      if (isActive(c.article_prog)) active++
+      else if (!isIntroduced(c.article_prog)) newCards++
     } else {
-      if (c.writing.level === 0) notStarted++
-      else if (isDue(c.writing)) due++
-      else cooldown++
+      if (isActive(c.writing)) active++
+      else if (!isIntroduced(c.writing)) newCards++
     }
   }
-  return { due, cooldown, notStarted }
+  return { active, newCards }
 }
 
-// Quiz: 3 неправильных варианта
+// Quiz: 3 wrong options
 export function getWrongOptions(
   correct: Card,
   packCards: Card[],
-  direction: Direction
+  direction: Direction,
 ): Card[] {
   const getLabel = (c: Card) => direction === 'de_ru' ? c.translation : c.word
   const correctLabel = getLabel(correct)
@@ -242,16 +191,16 @@ export function getWrongOptions(
   if (pool.length >= 3) return pool.slice(0, 3)
   const allCards = getPacks().flatMap(p => p.cards)
   const fallback = shuffle(
-    allCards.filter(c => c.id !== correct.id && getLabel(c) !== correctLabel && !pool.find(p => p.id === c.id))
+    allCards.filter(c => c.id !== correct.id && getLabel(c) !== correctLabel && !pool.find(p => p.id === c.id)),
   )
   return [...pool, ...fallback].slice(0, 3)
 }
 
-// Статистика для главной
-export function countDueToday(cards: Card[]): number {
+// "Active" cards for home screen: introduced AND n ≤ ACTIVE_THRESHOLD in any mode
+export function countActiveCards(cards: Card[]): number {
   const ids = new Set<string>()
   for (const c of cards) {
-    if (isDue(c.flashcard) || isDue(c.quiz.de_ru) || isDue(c.quiz.ru_de) || isDue(c.writing))
+    if (isActive(c.flashcard) || isActive(c.quiz.de_ru) || isActive(c.quiz.ru_de) || isActive(c.writing) || isActive(c.article_prog))
       ids.add(c.id)
   }
   return ids.size
@@ -259,16 +208,16 @@ export function countDueToday(cards: Card[]): number {
 
 export function avgMasteryPercent(cards: Card[]): number {
   if (cards.length === 0) return 0
+  const MAX_N = 15
   const total = cards.reduce((sum, c) => {
-    const flash = c.flashcard.level / 5
-    const quiz  = (c.quiz.de_ru.level + c.quiz.ru_de.level) / 2 / 5
-    const write = c.writing.level / 5
+    const flash = Math.min(c.flashcard.n / MAX_N, 1)
+    const quiz  = Math.min((c.quiz.de_ru.n + c.quiz.ru_de.n) / 2 / MAX_N, 1)
+    const write = Math.min(c.writing.n / MAX_N, 1)
     return sum + (flash + quiz + write) / 3
   }, 0)
   return Math.round((total / cards.length) * 100)
 }
 
-// Хелперы
 function pickDir(directions: Record<Direction, boolean>): Direction {
   if (directions.de_ru && directions.ru_de) return Math.random() < 0.5 ? 'de_ru' : 'ru_de'
   return directions.de_ru ? 'de_ru' : 'ru_de'
@@ -281,10 +230,4 @@ function shuffle<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]]
   }
   return a
-}
-
-function getProgress(item: QueueItem, mode: StudyMode): CardProgress {
-  if (mode === 'flashcard') return item.card.flashcard
-  if (mode === 'quiz') return item.direction === 'de_ru' ? item.card.quiz.de_ru : item.card.quiz.ru_de
-  return item.card.writing
 }

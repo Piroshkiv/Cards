@@ -4,18 +4,18 @@ import { ArrowLeft, Plus, Trash2, Play } from 'lucide-react'
 import { getPack, savePack } from '../utils/storage'
 import { defaultProgress } from '../utils/progress'
 import { Modal } from '../components/Modal'
-import type { Card, Pack, MasteryLevel } from '../types'
+import type { Card, Pack, CardProgress } from '../types'
+import { isIntroduced } from '../utils/progress'
 
-// Точка уровня: 0=серый, 1-2=жёлтый, 3=синий, 4-5=зелёный
-function LevelDot({ level }: { level: MasteryLevel }) {
-  const color =
-    level === 0 ? 'var(--border)' :
-    level <= 2  ? 'var(--warning)' :
-    level === 3 ? 'var(--primary)' :
+// n=0 not introduced → grey; n≤2 → yellow; n≤8 → blue; n>8 → green
+function ProgressDot({ progress }: { progress: CardProgress }) {
+  const color = !isIntroduced(progress) ? 'var(--border)' :
+    progress.n <= 2 ? 'var(--warning)' :
+    progress.n <= 8 ? 'var(--primary)' :
     'var(--success)'
   return (
     <span
-      title={`уровень ${level}`}
+      title={`n = ${progress.n.toFixed(1)}`}
       style={{
         display: 'inline-block',
         width: 8, height: 8,
@@ -31,10 +31,10 @@ function LevelDot({ level }: { level: MasteryLevel }) {
 function CardLevels({ card }: { card: Card }) {
   return (
     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-      <LevelDot level={card.flashcard.level} />
-      <LevelDot level={card.quiz.de_ru.level} />
-      <LevelDot level={card.quiz.ru_de.level} />
-      <LevelDot level={card.writing.level} />
+      <ProgressDot progress={card.flashcard} />
+      <ProgressDot progress={card.quiz.de_ru} />
+      <ProgressDot progress={card.quiz.ru_de} />
+      <ProgressDot progress={card.writing} />
     </div>
   )
 }

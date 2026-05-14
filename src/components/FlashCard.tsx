@@ -1,18 +1,16 @@
 import { useState } from 'react'
 import type { Card, Grade, Direction } from '../types'
-import { LEVEL_LABELS, formatMinutes } from '../utils/progress'
 
 interface FlashCardProps {
   card: Card
   direction: Direction
   onGrade: (grade: Grade) => void
-  intervals: Record<Grade, number>
 }
 
-const gradeLabels: Record<Grade, string> = { 0: 'Снова', 1: 'Сложно', 2: 'Хорошо', 3: 'Легко' }
-const gradeVariants: Record<Grade, string> = { 0: 'danger', 1: 'warning', 2: 'primary', 3: 'success' }
+const gradeLabels: Record<Grade, string>    = { 0: 'Сложно', 1: 'Нормально', 2: 'Легко', 3: 'Очень легко' }
+const gradeVariants: Record<Grade, string>  = { 0: 'danger', 1: 'warning',   2: 'primary', 3: 'success' }
 
-export function FlashCard({ card, direction, onGrade, intervals }: FlashCardProps) {
+export function FlashCard({ card, direction, onGrade }: FlashCardProps) {
   const [flipped, setFlipped] = useState(false)
 
   const front = direction === 'de_ru' ? card.word : card.translation
@@ -25,10 +23,6 @@ export function FlashCard({ card, direction, onGrade, intervals }: FlashCardProp
 
   return (
     <div className="flashcard-container">
-      <div className="flashcard-level">
-        {LEVEL_LABELS[card.flashcard.level]}
-      </div>
-
       <div
         className={`flashcard ${flipped ? 'flashcard--flipped' : ''}`}
         onClick={() => !flipped && setFlipped(true)}
@@ -54,7 +48,6 @@ export function FlashCard({ card, direction, onGrade, intervals }: FlashCardProp
               onClick={() => handleGrade(grade)}
             >
               <span className="grade-btn__label">{gradeLabels[grade]}</span>
-              <span className="grade-btn__interval">{formatMinutes(intervals[grade])}</span>
             </button>
           ))}
         </div>

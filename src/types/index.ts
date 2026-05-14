@@ -1,24 +1,25 @@
-// 0 = не введено, 1-5 = лесенка интервалов
-export type MasteryLevel = 0 | 1 | 2 | 3 | 4 | 5
-
 export interface CardProgress {
-  level: MasteryLevel
-  dueDate: string | null  // null если level === 0
+  n: number                  // float, starts at 0
+  last_seen_session: number  // 0 = not yet introduced
 }
 
-// Quiz отдельно по направлениям
 export interface QuizProgress {
   de_ru: CardProgress
   ru_de: CardProgress
 }
 
+export type Article = 'der' | 'die' | 'das' | '-' | ''
+
 export interface Card {
   id: string
-  word: string          // немецкое
+  word: string      // singular
+  plural: string
+  article: Article
   translation: string
   flashcard: CardProgress
   quiz: QuizProgress
   writing: CardProgress
+  article_prog: CardProgress
 }
 
 export interface Pack {
@@ -31,7 +32,7 @@ export interface Pack {
   createdBy: string
 }
 
-export type StudyMode = 'flashcard' | 'quiz' | 'writing'
+export type StudyMode = 'flashcard' | 'quiz' | 'writing' | 'article'
 export type Direction = 'de_ru' | 'ru_de'
 
 export interface StudySettings {
@@ -39,10 +40,5 @@ export interface StudySettings {
   directions: Record<Direction, boolean>
 }
 
-// Grade: 0=Again 1=Hard 2=Good 3=Easy
+// 0=hard, 1=normal, 2=easy, 3=very_easy (maps to WORD_RATINGS)
 export type Grade = 0 | 1 | 2 | 3
-
-export interface SessionStats {
-  answered: number
-  levelsGained: number
-}

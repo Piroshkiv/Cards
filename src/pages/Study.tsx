@@ -1,17 +1,21 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { X, ArrowLeft } from 'lucide-react'
-import { getPack, saveStudySettings, getStudySettings, savePack } from '../utils/storage'
-import { applyGrade, applyQuizResult, gradeIntervals } from '../utils/progress'
 import {
-  refreshQueueState,
-  getNextDueTime, getSessionStatus, getWrongOptions,
+  getPack, saveStudySettings, getStudySettings, savePack,
+  getCurrentSession, incrementSession,
+} from '../utils/storage'
+import { applyWordGrade, applyQuizResult } from '../utils/progress'
+import {
+  ensureMinActive, pickNextItem, getSessionStatus, getWrongOptions,
   type QueueItem,
 } from '../utils/deck'
 import { FlashCard } from '../components/FlashCard'
 import { QuizCard } from '../components/QuizCard'
 import { WritingCard } from '../components/WritingCard'
+import { ArticleCard } from '../components/ArticleCard'
 import type { StudyMode, Direction, Grade, StudySettings } from '../types'
+import { applyArticleResult } from '../utils/progress'
 
 type Phase = 'setup' | 'session' | 'results'
 
@@ -28,7 +32,7 @@ export function Study() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const [phase, setPhase]   = useState<Phase>('setup')
+  const [phase, setPhase] = useState<Phase>('setup')
   const [settings, setSettings] = useState<StudySettings>(() => {
     const s = getStudySettings(id!)
     const pack = getPack(id!)
@@ -36,22 +40,15 @@ export function Study() {
     return s
   })
 
-  // Session queue — основная структура данных сессии
-  const [queue, setQueue]           = useState<QueueItem[]>([])
-  const [answered, setAnswered]     = useState(0)
-  const [levelsGained, setLevelsGained] = useState(0)
-  const [waiting, setWaiting]       = useState(false)
-  const [nextDue, setNextDue]       = useState<Date | null>(null)
-  const [countdown, setCountdown]   = useState('')
+  const [queue, setQueue]       = useState<QueueItem[]>([])
+  const [answered, setAnswered] = useState(0)
+  const [currentSession, setCurrentSession] = useState(getCurrentSession)
 
-  // Батч-направление для quiz: 5–10 карточек в одну сторону, потом переключение
+  // Quiz batch: 10 cards per direction before switching
   const BATCH_SIZE = 10
   const [batchDir, setBatchDir]     = useState<Direction>('de_ru')
   const [batchCount, setBatchCount] = useState(0)
-  // Запаркованная очередь противоположного направления — не удаляется при переключении
-  const [parkedQueue, setParkedQueue] = useState<QueueItem[]>([])
 
-  // Эффективные направления: в quiz с обеими включёнными — только текущий батч
   const activeDirs = useMemo((): Record<Direction, boolean> => {
     if (settings.mode !== 'quiz' || !settings.directions.de_ru || !settings.directions.ru_de)
       return settings.directions
@@ -60,44 +57,7 @@ export function Study() {
 
   const pack = getPack(id!)
 
-  // Когда ждём — тикаем и автопроверяем появление due карточек
-  useEffect(() => {
-    if (!waiting) return
-    const tick = () => {
-      const fresh = getPack(id!)
-      if (!fresh) return
-      const q = refreshQueueState(fresh, settings.mode, activeDirs, [])
-      if (q.length > 0) {
-        setWaiting(false)
-        setQueue(q)
-        return
-      }
-      const nd = getNextDueTime(fresh, settings.mode, activeDirs)
-      setNextDue(nd)
-      if (nd) {
-        const diff = nd.getTime() - Date.now()
-        const mins = Math.floor(diff / 60000)
-        const secs = Math.floor((diff % 60000) / 1000)
-        setCountdown(mins > 0 ? `${mins} мин ${secs} с` : `${secs} с`)
-      }
-    }
-    tick()
-    const iv = setInterval(tick, 500)
-    return () => clearInterval(iv)
-  }, [waiting])
-
-  // Все хуки должны быть до любых условных return
   const current = queue[0] ?? null
-
-  const currentIntervals = useMemo(() => {
-    if (!current) return { 0: 0.5, 1: 3, 2: 10, 3: 1440 } as Record<Grade, number>
-    const prog = settings.mode === 'flashcard'
-      ? current.card.flashcard
-      : settings.mode === 'quiz'
-        ? (current.direction === 'de_ru' ? current.card.quiz.de_ru : current.card.quiz.ru_de)
-        : current.card.writing
-    return gradeIntervals(prog)
-  }, [current?.card.id, current?.direction, settings.mode])
 
   const quizOptions = useMemo(() => {
     if (settings.mode !== 'quiz' || !current || !pack) return []
@@ -109,80 +69,73 @@ export function Study() {
     return <div className="page"><p>Пак не найден. <Link to="/">На главную</Link></p></div>
   }
 
-  // ─── Применить ответ и обновить очередь ──────────────────────────────────
-
-  function applyAnswer(grade: Grade) {
-    const current = queue[0]
-    if (!current) return
-
-    const fresh = getPack(id!)!
-    const card  = fresh.cards.find(c => c.id === current.card.id)!
-    const remaining = queue.slice(1)
-
-    if (grade === 0) {
-      // Again: не сохраняем в storage, двигаем карточку в конец очереди
-      setAnswered(n => n + 1)
-      const newQ = refreshQueueState(fresh, settings.mode, activeDirs, remaining, current)
-      setQueue(newQ)
-      return
-    }
-
-    // Hard / Good / Easy: обновляем прогресс в storage
-    let levelBefore: number
-    if (settings.mode === 'flashcard') {
-      levelBefore = card.flashcard.level
-      card.flashcard = applyGrade(card.flashcard, grade)
-      if (card.flashcard.level > levelBefore) setLevelsGained(n => n + 1)
-    } else if (settings.mode === 'quiz') {
-      const prog = current.direction === 'de_ru' ? card.quiz.de_ru : card.quiz.ru_de
-      levelBefore = prog.level
-      const updated = applyGrade(prog, grade)
-      if (updated.level > levelBefore) setLevelsGained(n => n + 1)
-      if (current.direction === 'de_ru') card.quiz.de_ru = updated
-      else card.quiz.ru_de = updated
-    } else {
-      levelBefore = card.writing.level
-      card.writing = applyGrade(card.writing, grade)
-      if (card.writing.level > levelBefore) setLevelsGained(n => n + 1)
-    }
-    savePack(fresh)
-
-    setAnswered(n => n + 1)
-
-    const newQ = refreshQueueState(fresh, settings.mode, activeDirs, remaining)
-    if (newQ.length === 0) {
-      setWaiting(true)
-    } else {
-      setQueue(newQ)
-    }
+  function pickNext(
+    freshPack: NonNullable<typeof pack>,
+    dirs: Record<Direction, boolean>,
+    session: number,
+    excludeKey?: string,
+  ): void {
+    ensureMinActive(freshPack, settings.mode, dirs, session)
+    const next = pickNextItem(freshPack, settings.mode, dirs, session, excludeKey)
+    setQueue(next ? [next] : [])
   }
 
-  function handleQuizAnswer(correct: boolean) {
-    const current = queue[0]
+  function cardKey(item: QueueItem): string {
+    return settings.mode === 'quiz' ? `${item.card.id}::${item.direction}` : item.card.id
+  }
+
+  // ─── Flashcard & Writing answer ───────────────────────────────────────────
+
+  function applyAnswer(grade: Grade) {
+    if (!current) return
+
+    const fresh = getPack(id!)!
+    const card  = fresh.cards.find(c => c.id === current.card.id)!
+
+    if (settings.mode === 'flashcard') {
+      card.flashcard = applyWordGrade(card.flashcard, grade, currentSession)
+    } else {
+      card.writing = applyWordGrade(card.writing, grade, currentSession)
+    }
+    savePack(fresh)
+    setAnswered(n => n + 1)
+    pickNext(fresh, activeDirs, currentSession, cardKey(current))
+  }
+
+  // ─── Article answer ───────────────────────────────────────────────────────
+
+  function handleArticleAnswer(correct: boolean) {
     if (!current) return
     const fresh = getPack(id!)!
     const card  = fresh.cards.find(c => c.id === current.card.id)!
-    const remaining = queue.slice(1)
+    card.article_prog = applyArticleResult(card.article_prog, correct, currentSession)
+    savePack(fresh)
+    setAnswered(n => n + 1)
+    pickNext(fresh, activeDirs, currentSession, cardKey(current))
+  }
+
+  // ─── Quiz answer ─────────────────────────────────────────────────────────
+
+  function handleQuizAnswer(correct: boolean) {
+    if (!current) return
+
+    const fresh = getPack(id!)!
+    const card  = fresh.cards.find(c => c.id === current.card.id)!
 
     const prog = current.direction === 'de_ru' ? card.quiz.de_ru : card.quiz.ru_de
-    const levelBefore = prog.level
-    const updated = applyQuizResult(prog, correct)
-    if (updated.level > levelBefore) setLevelsGained(n => n + 1)
+    const updated = applyQuizResult(prog, correct, currentSession)
     if (current.direction === 'de_ru') card.quiz.de_ru = updated
     else card.quiz.ru_de = updated
     savePack(fresh)
     setAnswered(n => n + 1)
 
-    // Батч: считаем каждый показ карточки (и правильный, и неправильный)
     const bothDirs = settings.directions.de_ru && settings.directions.ru_de
     let nextDirs = activeDirs
-    let dirSwitched = false
     if (bothDirs) {
       const newCount = batchCount + 1
       if (newCount >= BATCH_SIZE) {
         const newDir: Direction = batchDir === 'de_ru' ? 'ru_de' : 'de_ru'
         nextDirs = { de_ru: newDir === 'de_ru', ru_de: newDir === 'ru_de' }
-        dirSwitched = true
         setBatchDir(newDir)
         setBatchCount(0)
       } else {
@@ -190,30 +143,7 @@ export function Study() {
       }
     }
 
-    if (!correct) {
-      if (dirSwitched) {
-        // При смене направления паркуем remaining + wrong-карточку
-        setParkedQueue([...remaining, current])
-        const newQ = refreshQueueState(fresh, settings.mode, nextDirs, parkedQueue)
-        if (newQ.length === 0) setWaiting(true)
-        else setQueue(newQ)
-      } else {
-        const newQ = refreshQueueState(fresh, settings.mode, nextDirs, remaining, current)
-        setQueue(newQ)
-      }
-      return
-    }
-
-    if (dirSwitched) {
-      setParkedQueue(remaining)
-      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, parkedQueue)
-      if (newQ.length === 0) setWaiting(true)
-      else setQueue(newQ)
-    } else {
-      const newQ = refreshQueueState(fresh, settings.mode, nextDirs, remaining)
-      if (newQ.length === 0) setWaiting(true)
-      else setQueue(newQ)
-    }
+    pickNext(fresh, nextDirs, currentSession, cardKey(current))
   }
 
   // ─── SETUP ───────────────────────────────────────────────────────────────
@@ -221,28 +151,22 @@ export function Study() {
   function handleStart() {
     saveStudySettings(id!, settings)
     setAnswered(0)
-    setLevelsGained(0)
-    setWaiting(false)
     setPhase('session')
+
+    const session = incrementSession()
+    setCurrentSession(session)
 
     const startDir: Direction = Math.random() < 0.5 ? 'de_ru' : 'ru_de'
     setBatchDir(startDir)
     setBatchCount(0)
-    setParkedQueue([])
 
     const startDirs: Record<Direction, boolean> =
-      (settings.mode === 'quiz' && settings.directions.de_ru && settings.directions.ru_de)
+      settings.mode === 'quiz' && settings.directions.de_ru && settings.directions.ru_de
         ? { de_ru: startDir === 'de_ru', ru_de: startDir === 'ru_de' }
         : settings.directions
 
     const fresh = getPack(id!)!
-    const q = refreshQueueState(fresh, settings.mode, startDirs, [])
-    if (q.length === 0) {
-      setWaiting(true)
-      setNextDue(getNextDueTime(fresh, settings.mode, startDirs))
-    } else {
-      setQueue(q)
-    }
+    pickNext(fresh, startDirs, session)
   }
 
   function toggleDir(dir: Direction) {
@@ -264,13 +188,15 @@ export function Study() {
         <div className="setup card">
           <h2>Режим</h2>
           <div className="setup__modes">
-            {(['flashcard', 'quiz', 'writing'] as StudyMode[]).map(mode => {
-              const disabled = mode === 'quiz' && !canQuiz
-              const titles: Record<StudyMode, string> = { flashcard: 'Карточки', quiz: 'Квиз', writing: 'Написание' }
+            {(['flashcard', 'quiz', 'writing', 'article'] as StudyMode[]).map(mode => {
+              const canArticle = pack.cards.filter(c => c.article === 'der' || c.article === 'die' || c.article === 'das').length >= 3
+              const disabled = (mode === 'quiz' && !canQuiz) || (mode === 'article' && !canArticle)
+              const titles: Record<StudyMode, string> = { flashcard: 'Карточки', quiz: 'Квиз', writing: 'Написание', article: 'Артикль' }
               const descs:  Record<StudyMode, string>  = {
                 flashcard: 'Переворот + оценка',
                 quiz:      canQuiz ? '4 варианта ответа' : 'Нужно ≥ 4 слов',
                 writing:   'Собери слово из букв',
+                article:   canArticle ? 'der / die / das' : 'Нужно ≥ 3 слов с артиклем',
               }
               return (
                 <button key={mode}
@@ -319,14 +245,10 @@ export function Study() {
       <div className="page">
         <div className="page-header"><h1>Сессия завершена</h1></div>
         <div className="results card">
-          <div className="results__grid results__grid--2">
+          <div className="results__grid results__grid--1">
             <div className="results__item results__item--primary">
               <span className="results__value">{answered}</span>
               <span className="results__label">ответов</span>
-            </div>
-            <div className="results__item results__item--success">
-              <span className="results__value">{levelsGained}</span>
-              <span className="results__label">уровней получено</span>
             </div>
           </div>
           <div className="results__actions">
@@ -341,7 +263,7 @@ export function Study() {
   // ─── SESSION ─────────────────────────────────────────────────────────────
 
   const freshPack = getPack(id!)!
-  const status    = getSessionStatus(freshPack, settings.mode, settings.directions)
+  const status = getSessionStatus(freshPack, settings.mode, settings.directions)
 
   return (
     <div className="page">
@@ -350,26 +272,14 @@ export function Study() {
           <X size={20} />
         </button>
         <div className="session-status">
-          <span className="session-status__item session-status__item--due">{status.due} due</span>
-          <span className="session-status__item session-status__item--cd">{status.cooldown} кд</span>
-          <span className="session-status__item session-status__item--new">{status.notStarted} новых</span>
+          <span className="session-status__item session-status__item--due">{status.active} активных</span>
+          <span className="session-status__item session-status__item--new">{status.newCards} новых</span>
         </div>
         <span className="study-counter">{answered}</span>
       </div>
 
       <div className="study-content">
-        {waiting ? (
-          <div className="waiting-state card">
-            <h3>Все слова на паузе</h3>
-            {nextDue
-              ? <p>Следующее через <strong>{countdown}</strong></p>
-              : <p>Нет слов для изучения</p>
-            }
-            <button className="btn btn--secondary btn--md" onClick={() => setPhase('results')}>
-              Завершить
-            </button>
-          </div>
-        ) : current ? (
+        {current ? (
           <>
             {settings.mode === 'flashcard' && (
               <FlashCard
@@ -377,7 +287,6 @@ export function Study() {
                 card={current.card}
                 direction={current.direction}
                 onGrade={applyAnswer}
-                intervals={currentIntervals}
               />
             )}
             {settings.mode === 'quiz' && (
@@ -396,8 +305,23 @@ export function Study() {
                 onGrade={applyAnswer}
               />
             )}
+            {settings.mode === 'article' && (
+              <ArticleCard
+                key={current.card.id}
+                card={current.card}
+                onAnswer={handleArticleAnswer}
+              />
+            )}
           </>
-        ) : null}
+        ) : (
+          <div className="waiting-state card">
+            <h3>Нет слов для изучения</h3>
+            <p>Добавьте слова в пак</p>
+            <button className="btn btn--secondary btn--md" onClick={() => setPhase('results')}>
+              Завершить
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -12,3 +12,11 @@ CREATE TABLE IF NOT EXISTS pack_owners (
   username TEXT NOT NULL,
   PRIMARY KEY (pack_id, username)
 );
+
+CREATE TABLE IF NOT EXISTS user_progress (
+  pack_id  TEXT NOT NULL,
+  username TEXT NOT NULL,
+  progress TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (pack_id, username)
+);

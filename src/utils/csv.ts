@@ -1,15 +1,20 @@
 import Papa from 'papaparse'
-import type { Pack, Card } from '../types'
+import type { Pack, Card, Article } from '../types'
 import { defaultProgress } from './progress'
 
-function newCard(word: string, translation: string): Card {
+const VALID_ARTICLES = new Set(['der', 'die', 'das', '-', ''])
+
+function newCard(article: Article, word: string, plural: string, translation: string): Card {
   return {
     id: crypto.randomUUID(),
+    article,
     word: word.trim(),
+    plural: plural.trim(),
     translation: translation.trim(),
     flashcard: defaultProgress(),
     quiz: { de_ru: defaultProgress(), ru_de: defaultProgress() },
     writing: defaultProgress(),
+    article_prog: defaultProgress(),
   }
 }
 
@@ -35,13 +40,18 @@ export function parseCSV(
 
   for (let i = 0; i < parsed.data.length; i++) {
     const row = parsed.data[i]
-    if (row.length < 3) {
-      result.errors.push(`Строка ${i + 1}: недостаточно столбцов`)
+    if (row.length < 5) {
+      result.errors.push(`Строка ${i + 1}: нужно 5 столбцов: пак, артикль, слово, мн.ч., перевод`)
       continue
     }
-    const [packName, word, translation] = row.map(s => s.trim())
+    const [packName, articleRaw, word, plural, translation] = row.map(s => s.trim())
     if (!packName || !word || !translation) {
       result.errors.push(`Строка ${i + 1}: пустые значения`)
+      continue
+    }
+    const article = articleRaw.toLowerCase() as Article
+    if (!VALID_ARTICLES.has(article)) {
+      result.errors.push(`Строка ${i + 1}: неверный артикль "${articleRaw}" (der/die/das/-/пусто)`)
       continue
     }
 
@@ -55,7 +65,7 @@ export function parseCSV(
 
     const exists = pack.cards.some(c => c.word.trim().toLowerCase() === word.toLowerCase())
     if (!exists) {
-      pack.cards.push(newCard(word, translation))
+      pack.cards.push(newCard(article, word, plural, translation))
       result.added++
       if (!result.created.includes(packName) && !result.updated.includes(packName)) {
         result.updated.push(packName)

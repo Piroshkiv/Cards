@@ -19,7 +19,9 @@ interface RemotePackSummary {
 
 interface RemoteCard {
   id: string
+  article: string
   word: string
+  plural: string
   translation: string
 }
 
@@ -34,21 +36,24 @@ interface RemoteFullPack {
 }
 
 function stripProgress(pack: Pack): RemoteCard[] {
-  return pack.cards.map(c => ({ id: c.id, word: c.word, translation: c.translation }))
+  return pack.cards.map(c => ({ id: c.id, article: c.article ?? '', word: c.word, plural: c.plural ?? '', translation: c.translation }))
 }
 
 function mergeCards(localPack: Pack | undefined, remoteCards: RemoteCard[]): Card[] {
   const localById = new Map(localPack?.cards.map(c => [c.id, c]) ?? [])
   return remoteCards.map(rc => {
     const local = localById.get(rc.id)
-    if (local) return { ...local, word: rc.word, translation: rc.translation }
+    if (local) return { ...local, article: rc.article as any ?? '', word: rc.word, plural: rc.plural ?? '', translation: rc.translation }
     return {
       id: rc.id,
+      article: rc.article as any ?? '',
       word: rc.word,
+      plural: rc.plural ?? '',
       translation: rc.translation,
       flashcard: defaultProgress(),
       quiz: { de_ru: defaultProgress(), ru_de: defaultProgress() },
       writing: defaultProgress(),
+      article_prog: defaultProgress(),
     }
   })
 }
@@ -130,6 +135,50 @@ export async function unsubscribeFromPack(packId: string, username: string): Pro
   await removeOwnerFromServer(packId, username)
 }
 
+// ─── Progress sync ───────────────────────────────────────────────────────────
+
+type ProgressMap = Record<string, {
+  flashcard: unknown; quiz: unknown; writing: unknown; article_prog: unknown
+}>
+
+function extractProgress(pack: Pack): ProgressMap {
+  const map: ProgressMap = {}
+  for (const c of pack.cards) {
+    map[c.id] = { flashcard: c.flashcard, quiz: c.quiz, writing: c.writing, article_prog: c.article_prog }
+  }
+  return map
+}
+
+function mergeProgress(pack: Pack, remote: ProgressMap): Pack {
+  return {
+    ...pack,
+    cards: pack.cards.map(c => {
+      const rp = remote[c.id]
+      if (!rp) return c
+      return { ...c, ...(rp as object) }
+    }),
+  }
+}
+
+async function pushProgress(pack: Pack, username: string): Promise<void> {
+  const res = await fetch(`${WORKER_URL}/api/progress/${pack.id}/${encodeURIComponent(username)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ progress: extractProgress(pack), updated_at: pack.updatedAt }),
+  })
+  if (!res.ok) throw new Error(`Progress push failed: ${res.status}`)
+}
+
+async function pullProgress(pack: Pack, username: string): Promise<Pack> {
+  const res = await fetch(`${WORKER_URL}/api/progress/${pack.id}/${encodeURIComponent(username)}`)
+  if (!res.ok) return pack
+  const { progress } = await res.json() as { progress: ProgressMap; updated_at: string }
+  if (!progress || Object.keys(progress).length === 0) return pack
+  return mergeProgress(pack, progress)
+}
+
+// ─── Main sync ───────────────────────────────────────────────────────────────
+
 export async function syncAll(username: string): Promise<void> {
   if (!WORKER_URL) return
 
@@ -159,20 +208,30 @@ export async function syncAll(username: string): Promise<void> {
       try { await pushPack(local, username) }
       catch { addToSyncQueue(local.id) }
     }
+    // Always push local progress
+    try { await pushProgress(local, username) } catch { /* offline */ }
   }
 
   const localById = new Map(localPacks.map(p => [p.id, p]))
   for (const remote of remoteList) {
     if (!remote.owners.includes(username)) continue
     const local = localById.get(remote.id)
-    if (local && !remoteIsNewer(local, remote)) continue
+    if (local && !remoteIsNewer(local, remote)) {
+      // Pack content is current, but still pull progress
+      try {
+        const merged = await pullProgress(local, username)
+        const idx = updatedPacks.findIndex(p => p.id === local.id)
+        if (idx >= 0) updatedPacks[idx] = merged
+      } catch { /* skip */ }
+      continue
+    }
 
     try {
       const res = await fetch(`${WORKER_URL}/api/packs/${remote.id}`)
       if (!res.ok) continue
       const full: RemoteFullPack = await res.json()
 
-      const merged: Pack = {
+      let merged: Pack = {
         id: full.id,
         name: full.name,
         version: full.version,
@@ -181,6 +240,8 @@ export async function syncAll(username: string): Promise<void> {
         createdBy: full.created_by,
         cards: mergeCards(local, full.cards),
       }
+
+      merged = await pullProgress(merged, username).catch(() => merged)
 
       const idx = updatedPacks.findIndex(p => p.id === full.id)
       if (idx >= 0) updatedPacks[idx] = merged

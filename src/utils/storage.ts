@@ -1,37 +1,53 @@
 import type { Pack, StudySettings, CardProgress } from '../types'
 
-const PACKS_KEY = 'cards_packs'
+const PACKS_KEY    = 'cards_packs'
 const SETTINGS_KEY = 'cards_study_settings'
 const USERNAME_KEY = 'cards_username'
 const SYNC_QUEUE_KEY = 'cards_sync_queue'
+const SESSION_KEY  = 'cards_current_session'
 
-const EMPTY_PROGRESS: CardProgress = { level: 0, dueDate: null }
+const EMPTY_PROGRESS: CardProgress = { n: 0, last_seen_session: 0 }
+
+function migrateProgress(raw: unknown): CardProgress {
+  if (!raw || typeof raw !== 'object') return EMPTY_PROGRESS
+  const p = raw as Record<string, unknown>
+
+  // Already new format
+  if ('n' in p) return { n: Number(p.n) || 0, last_seen_session: Number(p.last_seen_session) || 0 }
+
+  // Old format: { level, dueDate }
+  const level = Number(p.level) || 0
+  if (level === 0) return EMPTY_PROGRESS
+  const nByLevel: Record<number, number> = { 1: 0.5, 2: 1.5, 3: 3, 4: 6, 5: 10 }
+  return { n: nByLevel[level] ?? 0, last_seen_session: 1 }
+}
 
 function migratePack(raw: unknown): Pack {
   const pack = raw as Pack
-  const migrated: Pack = {
+  return {
     ...pack,
-    version: pack.version ?? 1,
+    version:   pack.version   ?? 1,
     updatedAt: pack.updatedAt ?? pack.createdAt,
     createdBy: pack.createdBy ?? '',
     cards: pack.cards.map(card => {
       const quiz = card.quiz as unknown as Record<string, unknown>
-      if (quiz && 'level' in quiz && !('de_ru' in quiz)) {
-        return {
-          ...card,
-          quiz: { de_ru: EMPTY_PROGRESS, ru_de: EMPTY_PROGRESS },
-        }
-      }
+      const isOldQuiz = quiz && 'level' in quiz && !('de_ru' in quiz)
       return {
         ...card,
-        quiz: {
-          de_ru: (card.quiz as any)?.de_ru ?? EMPTY_PROGRESS,
-          ru_de: (card.quiz as any)?.ru_de ?? EMPTY_PROGRESS,
-        },
+        article:      (card as any).article      ?? '',
+        plural:       (card as any).plural       ?? '',
+        flashcard:    migrateProgress((card as any).flashcard),
+        quiz: isOldQuiz
+          ? { de_ru: EMPTY_PROGRESS, ru_de: EMPTY_PROGRESS }
+          : {
+              de_ru: migrateProgress((card.quiz as any)?.de_ru),
+              ru_de: migrateProgress((card.quiz as any)?.ru_de),
+            },
+        writing:      migrateProgress((card as any).writing),
+        article_prog: migrateProgress((card as any).article_prog),
       }
     }),
   }
-  return migrated
 }
 
 export function getPacks(): Pack[] {
@@ -86,6 +102,19 @@ export function saveStudySettings(packId: string, settings: StudySettings): void
 
 function defaultStudySettings(): StudySettings {
   return { mode: 'flashcard', directions: { de_ru: true, ru_de: true } }
+}
+
+export function getCurrentSession(): number {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    return raw ? parseInt(raw, 10) : 1
+  } catch { return 1 }
+}
+
+export function incrementSession(): number {
+  const next = getCurrentSession() + 1
+  try { localStorage.setItem(SESSION_KEY, String(next)) } catch { }
+  return next
 }
 
 export function getUsername(): string | null {
