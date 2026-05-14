@@ -1,7 +1,7 @@
 import type { Card, StudyMode, Direction, Pack } from '../types'
 import {
-  isIntroduced, isActive, cardWeight, introduceCard,
-  MIN_ACTIVE,
+  isIntroduced, isActive, isActiveArticle, cardWeight, introduceCard,
+  MIN_ACTIVE, MIN_ACTIVE_ARTICLE,
 } from './progress'
 import { getPacks, savePack } from './storage'
 
@@ -32,7 +32,7 @@ function countActive(
       if (directions.de_ru && isActive(card.quiz.de_ru)) count++
       if (directions.ru_de && isActive(card.quiz.ru_de)) count++
     } else if (mode === 'article') {
-      if (isArticleCard(card) && isActive(card.article_prog)) count++
+      if (isArticleCard(card) && isActiveArticle(card.article_prog)) count++
     } else {
       if (isActive(card.writing)) count++
     }
@@ -40,14 +40,15 @@ function countActive(
   return count
 }
 
-// Introduce one new card if active count < MIN_ACTIVE. Mutates pack and saves.
+// Introduce one new card if active count < threshold. Mutates pack and saves.
 export function ensureMinActive(
   pack: Pack,
   mode: StudyMode,
   directions: Record<Direction, boolean>,
   currentSession: number,
 ): void {
-  if (countActive(pack, mode, directions) >= MIN_ACTIVE) return
+  const threshold = mode === 'article' ? MIN_ACTIVE_ARTICLE : MIN_ACTIVE
+  if (countActive(pack, mode, directions) >= threshold) return
 
   if (mode === 'flashcard') {
     const card = pickRandom(pack.cards.filter(c => !isIntroduced(c.flashcard)))
@@ -169,7 +170,7 @@ export function getSessionStatus(
       }
     } else if (mode === 'article') {
       if (!isArticleCard(c)) continue
-      if (isActive(c.article_prog)) active++
+      if (isActiveArticle(c.article_prog)) active++
       else if (!isIntroduced(c.article_prog)) newCards++
     } else {
       if (isActive(c.writing)) active++
@@ -200,7 +201,7 @@ export function getWrongOptions(
 export function countActiveCards(cards: Card[]): number {
   const ids = new Set<string>()
   for (const c of cards) {
-    if (isActive(c.flashcard) || isActive(c.quiz.de_ru) || isActive(c.quiz.ru_de) || isActive(c.writing) || isActive(c.article_prog))
+    if (isActive(c.flashcard) || isActive(c.quiz.de_ru) || isActive(c.quiz.ru_de) || isActive(c.writing) || isActiveArticle(c.article_prog))
       ids.add(c.id)
   }
   return ids.size

@@ -20,7 +20,9 @@ export const ARTICLE_RATINGS: RatingConfig[] = [
 ]
 
 export const ACTIVE_THRESHOLD = 2
+export const ACTIVE_THRESHOLD_ARTICLE = 4  // needs 2 correct answers to graduate
 export const MIN_ACTIVE = 8
+export const MIN_ACTIVE_ARTICLE = 6  // internal threshold for introducing new article cards
 
 export function defaultProgress(): CardProgress {
   return { n: 0, last_seen_session: 0 }
@@ -80,4 +82,8 @@ export function isIntroduced(progress: CardProgress): boolean {
 
 export function isActive(progress: CardProgress): boolean {
   return isIntroduced(progress) && progress.n <= ACTIVE_THRESHOLD
+}
+
+export function isActiveArticle(progress: CardProgress): boolean {
+  return isIntroduced(progress) && progress.n <= ACTIVE_THRESHOLD_ARTICLE
 }

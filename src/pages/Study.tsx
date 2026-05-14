@@ -128,7 +128,7 @@ export function Study() {
     const fresh = getPack(id!)!
     const card  = fresh.cards.find(c => c.id === current.card.id)!
     // Assign small starting n so word comes back for review but isn't looped immediately
-    card.article_prog = { n: 1.5, last_seen_session: currentSession }
+    card.article_prog = { n: 0, last_seen_session: currentSession }
     savePack(fresh)
     setAnswered(n => n + 1)
     brandNewIds.current.delete(current.card.id)
@@ -305,10 +305,12 @@ export function Study() {
         <button className="btn-icon" onClick={() => setPhase('results')} title="Завершить">
           <X size={20} />
         </button>
-        <div className="session-status">
-          <span className="session-status__item session-status__item--due">{status.active} активных</span>
-          <span className="session-status__item session-status__item--new">{status.newCards} новых</span>
-        </div>
+        {settings.mode !== 'article' && (
+          <div className="session-status">
+            <span className="session-status__item session-status__item--due">{status.active} активных</span>
+            <span className="session-status__item session-status__item--new">{status.newCards} новых</span>
+          </div>
+        )}
         <span className="study-counter">{answered}</span>
       </div>
 
