@@ -180,7 +180,7 @@ describe('WORD_RATINGS config', () => {
 })
 
 describe('ARTICLE_RATINGS config', () => {
-  it('has 3 entries', () => expect(ARTICLE_RATINGS).toHaveLength(3))
+  it('has 2 entries', () => expect(ARTICLE_RATINGS).toHaveLength(2))
 
   it('alphas are in (0, 1)', () => {
     for (const r of ARTICLE_RATINGS) {
@@ -192,8 +192,8 @@ describe('ARTICLE_RATINGS config', () => {
 
 describe('isActiveArticle', () => {
   it('uses ACTIVE_THRESHOLD_ARTICLE not ACTIVE_THRESHOLD', () => {
-    // n=3.2 is > ACTIVE_THRESHOLD(2) but ≤ ACTIVE_THRESHOLD_ARTICLE(4)
-    const p = { n: 3.2, last_seen_session: 1 }
+    // n=2.56 is > ACTIVE_THRESHOLD(2) but ≤ ACTIVE_THRESHOLD_ARTICLE(3)
+    const p = { n: 2.56, last_seen_session: 1 }
     expect(isActive(p)).toBe(false)
     expect(isActiveArticle(p)).toBe(true)
   })
@@ -205,51 +205,71 @@ describe('isActiveArticle', () => {
 })
 
 // ─── Article mode progression simulation ─────────────────────────────────────
+// target=4, alpha=0.4, ACTIVE_THRESHOLD_ARTICLE=3
+// n: 0 → 1.6 → 2.56 → 3.14 (graduates on 3rd correct)
 
 describe('article mode progression', () => {
   const session = 1
 
-  it('after intro (n=0) one correct answer: still active (n≤4)', () => {
+  it('correct 1: n=1.6, still active', () => {
     let p = { n: 0, last_seen_session: session }
     p = applyArticleResult(p, true, session)
-    // n = 0*0.6 + 8*0.4 = 3.2 → active (≤4)
-    expect(p.n).toBeCloseTo(3.2)
+    expect(p.n).toBeCloseTo(1.6)
     expect(isActiveArticle(p)).toBe(true)
   })
 
-  it('after intro two correct answers: graduates (n>4)', () => {
+  it('correct 2: n=2.56, still active', () => {
     let p = { n: 0, last_seen_session: session }
-    p = applyArticleResult(p, true, session)  // n≈3.2
-    p = applyArticleResult(p, true, session)  // n = 3.2*0.6 + 8*0.4 = 5.12
-    expect(p.n).toBeGreaterThan(ACTIVE_THRESHOLD_ARTICLE)
+    p = applyArticleResult(p, true, session)
+    p = applyArticleResult(p, true, session)
+    expect(p.n).toBeCloseTo(2.56)
+    expect(isActiveArticle(p)).toBe(true)
+  })
+
+  it('correct 3: n≈3.14, graduates (>3)', () => {
+    let p = { n: 0, last_seen_session: session }
+    for (let i = 0; i < 3; i++) p = applyArticleResult(p, true, session)
+    expect(p.n).toBeCloseTo(3.136)
     expect(isActiveArticle(p)).toBe(false)
   })
 
-  it('wrong answer keeps n at 0 (stays active)', () => {
+  it('wrong resets n toward 0, stays active', () => {
     let p = { n: 0, last_seen_session: session }
-    p = applyArticleResult(p, false, session)  // n = 0*0.4 = 0
+    p = applyArticleResult(p, false, session)
     expect(p.n).toBeCloseTo(0)
     expect(isActiveArticle(p)).toBe(true)
   })
 
-  it('wrong then correct: n=3.2 → still active, needs another correct', () => {
+  it('wrong after graduation re-activates card', () => {
     let p = { n: 0, last_seen_session: session }
-    p = applyArticleResult(p, false, session)  // n≈0
-    p = applyArticleResult(p, true, session)   // n≈3.2
-    expect(isActiveArticle(p)).toBe(true)
+    for (let i = 0; i < 3; i++) p = applyArticleResult(p, true, session)
+    expect(isActiveArticle(p)).toBe(false)  // graduated
+    p = applyArticleResult(p, false, session)
+    expect(p.n).toBeCloseTo(3.136 * 0.4)   // n drops significantly
+    expect(isActiveArticle(p)).toBe(true)   // re-activated
   })
 
-  it('repeated wrong answers keep n near 0', () => {
+  it('weight after graduation ≈ 0.336 (not too low)', () => {
+    // n=3.14, deckSize=340 → scale=1
+    // weight = 2^(-3.14/2) ≈ 0.336
+    const p = { n: 3.136, last_seen_session: session }
+    const w = cardWeight(p, session, 340)
+    expect(w).toBeGreaterThan(0.3)
+    expect(w).toBeLessThan(0.4)
+  })
+
+  it('asymptote weight ≈ 0.25 (target=4)', () => {
+    // converges to n=4: weight = 2^(-2) = 0.25
     let p = { n: 0, last_seen_session: session }
-    for (let i = 0; i < 10; i++) p = applyArticleResult(p, false, session)
-    expect(p.n).toBeCloseTo(0)
-    expect(isActiveArticle(p)).toBe(true)
+    for (let i = 0; i < 50; i++) p = applyArticleResult(p, true, session)
+    expect(p.n).toBeCloseTo(4, 1)
+    expect(cardWeight(p, session, 340)).toBeCloseTo(0.25, 1)
   })
 })
 
 describe('constants', () => {
   it('ACTIVE_THRESHOLD is 2',         () => expect(ACTIVE_THRESHOLD).toBe(2))
-  it('ACTIVE_THRESHOLD_ARTICLE is 4', () => expect(ACTIVE_THRESHOLD_ARTICLE).toBe(4))
+  it('ACTIVE_THRESHOLD_ARTICLE is 3', () => expect(ACTIVE_THRESHOLD_ARTICLE).toBe(3))
   it('MIN_ACTIVE is 8',               () => expect(MIN_ACTIVE).toBe(8))
-  it('MIN_ACTIVE_ARTICLE is 6',       () => expect(MIN_ACTIVE_ARTICLE).toBe(6))
+  it('MIN_ACTIVE_ARTICLE is 8',       () => expect(MIN_ACTIVE_ARTICLE).toBe(8))
 })

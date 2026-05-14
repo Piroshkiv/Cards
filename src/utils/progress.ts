@@ -14,15 +14,14 @@ export const WORD_RATINGS: RatingConfig[] = [
 ]
 
 export const ARTICLE_RATINGS: RatingConfig[] = [
-  { label: 'wrong',     target: 0,  alpha: 0.6 },
-  { label: 'hesitated', target: 3,  alpha: 0.3 },
-  { label: 'correct',   target: 8,  alpha: 0.4 },
+  { label: 'wrong',   target: 0, alpha: 0.6 },
+  { label: 'correct', target: 4, alpha: 0.4 },
 ]
 
 export const ACTIVE_THRESHOLD = 2
-export const ACTIVE_THRESHOLD_ARTICLE = 4  // needs 2 correct answers to graduate
+export const ACTIVE_THRESHOLD_ARTICLE = 3  // needs 3 correct answers to graduate
 export const MIN_ACTIVE = 8
-export const MIN_ACTIVE_ARTICLE = 6  // internal threshold for introducing new article cards
+export const MIN_ACTIVE_ARTICLE = 8  // same as MIN_ACTIVE
 
 export function defaultProgress(): CardProgress {
   return { n: 0, last_seen_session: 0 }
@@ -57,7 +56,7 @@ export function applyArticleResult(
   correct: boolean,
   currentSession: number,
 ): CardProgress {
-  const { target, alpha } = ARTICLE_RATINGS[correct ? 2 : 0]
+  const { target, alpha } = ARTICLE_RATINGS[correct ? 1 : 0]
   return {
     n: progress.n * (1 - alpha) + target * alpha,
     last_seen_session: currentSession,
