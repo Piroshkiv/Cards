@@ -4,7 +4,7 @@ import { ArrowLeft, Plus, Trash2, Play } from 'lucide-react'
 import { getPack, savePack } from '../utils/storage'
 import { defaultProgress } from '../utils/progress'
 import { Modal } from '../components/Modal'
-import type { Card, Pack, CardProgress } from '../types'
+import type { Card, Pack, CardProgress, Article } from '../types'
 import { isIntroduced } from '../utils/progress'
 
 // n=0 not introduced → grey; n≤2 → yellow; n≤8 → blue; n>8 → green
@@ -39,6 +39,13 @@ function CardLevels({ card }: { card: Card }) {
   )
 }
 
+const ARTICLE_BTNS: { label: string; value: Article }[] = [
+  { label: 'der', value: 'der' },
+  { label: 'die', value: 'die' },
+  { label: 'das', value: 'das' },
+  { label: '—',   value: '-'  },
+]
+
 export function PackDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -46,6 +53,7 @@ export function PackDetail() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [newWord, setNewWord] = useState('')
   const [newTranslation, setNewTranslation] = useState('')
+  const [newArticle, setNewArticle] = useState<Article>('')
 
   if (!pack) {
     return <div className="page"><p>Пак не найден. <Link to="/">На главную</Link></p></div>
@@ -54,6 +62,13 @@ export function PackDetail() {
   function save(updated: Pack) {
     savePack(updated)
     setPack(updated)
+  }
+
+  function openAddModal() {
+    setNewWord('')
+    setNewTranslation('')
+    setNewArticle('')
+    setShowAddModal(true)
   }
 
   function handleAddCard() {
@@ -66,7 +81,7 @@ export function PackDetail() {
     }
     const card: Card = {
       id: crypto.randomUUID(),
-      article: '',
+      article: newArticle,
       word,
       plural: '',
       translation,
@@ -76,13 +91,15 @@ export function PackDetail() {
       article_prog: defaultProgress(),
     }
     save({ ...pack!, cards: [...pack!.cards, card] })
-    setNewWord('')
-    setNewTranslation('')
     setShowAddModal(false)
   }
 
   function handleDeleteCard(cardId: string) {
     save({ ...pack!, cards: pack!.cards.filter(c => c.id !== cardId) })
+  }
+
+  function cardDisplayWord(card: Card): string {
+    return card.article && card.article !== '-' ? `${card.article} ${card.word}` : card.word
   }
 
   return (
@@ -93,7 +110,7 @@ export function PackDetail() {
         <Link to={`/study/${pack.id}`}>
           <button className="btn btn--primary btn--sm"><Play size={14} />Учить</button>
         </Link>
-        <button className="btn btn--primary btn--sm" onClick={() => setShowAddModal(true)}>
+        <button className="btn btn--primary btn--sm" onClick={openAddModal}>
           <Plus size={16} />Слово
         </button>
       </div>
@@ -112,7 +129,7 @@ export function PackDetail() {
           {pack.cards.map(card => (
             <div key={card.id} className="card-row">
               <div className="card-row__words">
-                <span className="card-row__word">{card.word}</span>
+                <span className="card-row__word">{cardDisplayWord(card)}</span>
                 <span className="card-row__sep">—</span>
                 <span className="card-row__translation">{card.translation}</span>
               </div>
@@ -132,6 +149,18 @@ export function PackDetail() {
       {showAddModal && (
         <Modal title="Новое слово" onClose={() => setShowAddModal(false)}>
           <div className="modal-form">
+            <div className="article-picker">
+              {ARTICLE_BTNS.map(({ label, value }) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`quiz-option quiz-option--article${newArticle === value ? ' quiz-option--correct' : ''}`}
+                  onClick={() => setNewArticle(prev => prev === value ? '' : value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <input
               className="input" type="text" placeholder="Немецкое слово"
               value={newWord} onChange={e => setNewWord(e.target.value)} autoFocus

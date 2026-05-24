@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Card, Grade, Direction } from '../types'
+import { speakGerman, cancelSpeech } from '../utils/tts'
+import { germanText } from '../utils/german'
 
 interface FlashCardProps {
   card: Card
@@ -12,11 +14,25 @@ const gradeVariants: Record<Grade, string>  = { 0: 'danger', 1: 'warning',   2: 
 
 export function FlashCard({ card, direction, onGrade }: FlashCardProps) {
   const [flipped, setFlipped] = useState(false)
+  const speakRef = useRef<Promise<void>>(Promise.resolve())
 
-  const front = direction === 'de_ru' ? card.word : card.translation
-  const back  = direction === 'de_ru' ? card.translation : card.word
+  const deWord = germanText(card)
+  const front  = direction === 'de_ru' ? deWord : card.translation
+  const back   = direction === 'de_ru' ? card.translation : deWord
 
-  function handleGrade(grade: Grade) {
+  useEffect(() => {
+    if (direction === 'de_ru') speakRef.current = speakGerman(germanText(card))
+    return () => cancelSpeech()
+  }, [card.id, direction])
+
+  function handleFlip() {
+    if (flipped) return
+    setFlipped(true)
+    if (direction === 'ru_de') speakRef.current = speakGerman(germanText(card))
+  }
+
+  async function handleGrade(grade: Grade) {
+    if (direction === 'ru_de') await speakRef.current
     setFlipped(false)
     onGrade(grade)
   }
@@ -25,7 +41,7 @@ export function FlashCard({ card, direction, onGrade }: FlashCardProps) {
     <div className="flashcard-container">
       <div
         className={`flashcard ${flipped ? 'flashcard--flipped' : ''}`}
-        onClick={() => !flipped && setFlipped(true)}
+        onClick={handleFlip}
       >
         <div className="flashcard__face flashcard__front">
           <span className="flashcard__word">{front}</span>

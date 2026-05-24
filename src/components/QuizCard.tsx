@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Card, Direction } from '../types'
+import { speakGerman, cancelSpeech } from '../utils/tts'
+import { germanText } from '../utils/german'
 
 interface QuizCardProps {
   card: Card
@@ -11,19 +13,32 @@ interface QuizCardProps {
 export function QuizCard({ card, direction, options, onAnswer }: QuizCardProps) {
   const [selected, setSelected] = useState<string | null>(null)
 
-  const question     = direction === 'de_ru' ? card.word : card.translation
+  const deWord       = germanText(card)
+  const question     = direction === 'de_ru' ? deWord : card.translation
   const correctLabel = direction === 'de_ru' ? card.translation : card.word
   const getLabel     = (c: Card) => direction === 'de_ru' ? c.translation : c.word
+  const getDisplay   = (c: Card) => direction === 'de_ru' ? c.translation : germanText(c)
 
-  function handleSelect(opt: Card) {
+  useEffect(() => {
+    if (direction === 'de_ru') speakGerman(deWord)
+    return () => cancelSpeech()
+  }, [card.id, direction])
+
+  async function handleSelect(opt: Card) {
     if (selected !== null) return
     const label   = getLabel(opt)
     const correct = label === correctLabel
     setSelected(label)
-    setTimeout(() => {
+    if (direction === 'ru_de') {
+      await speakGerman(deWord)
       setSelected(null)
       onAnswer(correct)
-    }, 1500)
+    } else {
+      setTimeout(() => {
+        setSelected(null)
+        onAnswer(correct)
+      }, 1500)
+    }
   }
 
   function optionClass(opt: Card): string {
@@ -48,7 +63,7 @@ export function QuizCard({ card, direction, options, onAnswer }: QuizCardProps) 
             onClick={() => handleSelect(opt)}
             disabled={selected !== null}
           >
-            {getLabel(opt)}
+            {getDisplay(opt)}
           </button>
         ))}
       </div>

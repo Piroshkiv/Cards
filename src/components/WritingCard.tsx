@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Card, Grade } from '../types'
-import { generateTiles, getTileSize, type Tile } from '../utils/german'
+import { generateTiles, getTileSize, germanText, type Tile } from '../utils/german'
+import { speakGerman } from '../utils/tts'
 
 interface WritingCardProps {
   card: Card
@@ -13,6 +14,7 @@ export function WritingCard({ card, onGrade }: WritingCardProps) {
   const [selected, setSelected] = useState<Tile[]>([])
   const [checked, setChecked] = useState(false)
   const [correct, setCorrect] = useState(false)
+  const speakRef = useRef<Promise<void>>(Promise.resolve())
   const tileSize = getTileSize(answer)
 
   const current = selected.map(t => t.letter).join('')
@@ -32,6 +34,12 @@ export function WritingCard({ card, onGrade }: WritingCardProps) {
     const ok = current === answer
     setCorrect(ok)
     setChecked(true)
+    speakRef.current = speakGerman(germanText(card))
+  }
+
+  async function handleGrade(grade: Grade) {
+    await speakRef.current
+    onGrade(grade)
   }
 
   return (
@@ -52,7 +60,7 @@ export function WritingCard({ card, onGrade }: WritingCardProps) {
 
       {checked && (
         <div className={`writing-result ${correct ? 'writing-result--correct' : 'writing-result--wrong'}`}>
-          {correct ? 'Правильно!' : `Правильно: ${card.word}`}
+          {correct ? 'Правильно!' : `Правильно: ${germanText(card)}`}
         </div>
       )}
 
@@ -82,19 +90,19 @@ export function WritingCard({ card, onGrade }: WritingCardProps) {
         <div className="grade-buttons">
           {correct ? (
             <>
-              <button className="grade-btn grade-btn--primary" onClick={() => onGrade(2)}>
+              <button className="grade-btn grade-btn--primary" onClick={() => handleGrade(2)}>
                 <span className="grade-btn__label">Хорошо</span>
               </button>
-              <button className="grade-btn grade-btn--success" onClick={() => onGrade(3)}>
+              <button className="grade-btn grade-btn--success" onClick={() => handleGrade(3)}>
                 <span className="grade-btn__label">Легко</span>
               </button>
             </>
           ) : (
             <>
-              <button className="grade-btn grade-btn--danger" onClick={() => onGrade(0)}>
+              <button className="grade-btn grade-btn--danger" onClick={() => handleGrade(0)}>
                 <span className="grade-btn__label">Снова</span>
               </button>
-              <button className="grade-btn grade-btn--warning" onClick={() => onGrade(1)}>
+              <button className="grade-btn grade-btn--warning" onClick={() => handleGrade(1)}>
                 <span className="grade-btn__label">Сложно</span>
               </button>
             </>

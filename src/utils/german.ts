@@ -1,3 +1,9 @@
+import type { Card } from '../types'
+
+export function germanText(card: Card): string {
+  return card.article && card.article !== '-' ? `${card.article} ${card.word}` : card.word
+}
+
 const GERMAN_ALPHABET = 'aäbcdefghijklmnoöpqrsßtuüvwxyz'
 
 function shuffle<T>(arr: T[]): T[] {
